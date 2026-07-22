@@ -523,6 +523,25 @@ const NPCS = [
     },
   },
   {
+    id: "consultant",
+    name: "Consultant Cole",
+    x: 520,
+    y: 160,
+    color: "#9a90b0",
+    home: "mayor",
+    lines: {
+      default: "I can optimize your civic narrative. Retainer: 15¢. Memo guaranteed.",
+      broke: "No 15¢, no synergy. That's the framework.",
+      sold: [
+        "Memo: 'Synergy.' Invoice attached. You're welcome.",
+        "Memo: 'Leverage stakeholders.' Bolded twice for impact.",
+        "Memo: 'Circle back offline.' Revolutionary.",
+        "Memo: 'Thought leadership.' (It's empty. That's the point.)",
+      ],
+      exposed: "Between us? The memo was pre-written. Still counts as delivery.",
+    },
+  },
+  {
     id: "mover",
     name: "Foreman Flo",
     x: 295,

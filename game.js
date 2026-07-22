@@ -51,7 +51,7 @@
       regAsset(`player/${id}_walk_${f}`, `assets/player/${id}_walk_${f}.png`);
     }
   });
-  ["clerk", "barista", "vendor", "mover", "stagehand", "boothie", "parkgoer", "watchdog", "paver"].forEach((id) => {
+  ["clerk", "barista", "vendor", "mover", "stagehand", "boothie", "parkgoer", "watchdog", "paver", "consultant"].forEach((id) => {
     regAsset(`npc/${id}`, `assets/npc/${id}.png`);
   });
   ["crypto", "wine", "students", "union", "moderates", "chaos", "donors", "conspiracy", "budget", "patriots", "policy", "lawn"].forEach((id) => {
@@ -316,6 +316,8 @@
   let launchT = 0;
   let brandT = 0;
   let potholePaid = 0; // Paver Pete's grift counter
+  let consultantPaid = 0; // Consultant Cole synergy memos
+  let coleDay = 0; // once-per-day Cole invoice
   let boeDay = 0, adDay = 0; // once-per-day "microtransaction" gags
   let currentDistrict = "plaza";
   let setpieces = { debate: false, scandal: false, march: false, gala: false };
@@ -330,6 +332,14 @@
   let voters = []; // recruited group ids
   let voterLoyalty = {};
   let voterFavor = {}; // id -> task pings toward favorNeed (must grind errands to recruit)
+  // Week-has-teeth layer (light meta — does not rewrite axes/coalitions)
+  let rivalPressure = 0; // 0–8; rises if you ignore unlocked districts
+  let rivalStealsWeek = 0; // cap steals so roster can't be gutted
+  let rivalStoleToday = false;
+  let districtsVisitedToday = { plaza: true };
+  let recruitsToday = 0; // successful new joins this calendar day
+  let boardTipId = null; // daily uncommitted bloc sticky on BOARD
+  const RIVAL_NAME = "Rival Campaign (Generic)"; // fictional archetype, no real people
   let hasPermit = false;
   let permitDelivered = false;
   let coffeeFixed = false;
@@ -382,6 +392,9 @@
     if (!sp || !player) return false;
     const prev = currentDistrict;
     currentDistrict = districtId;
+    districtsVisitedToday[districtId] = true;
+    // Showing up cools the rival a notch (light)
+    if (districtId !== "plaza" && rivalPressure > 0) rivalPressure = Math.max(0, rivalPressure - 1);
     player.x = sp.x;
     player.y = sp.y;
     const d = DISTRICTS.find((x) => x.id === districtId);
@@ -437,6 +450,8 @@
     launchT = 0;
     brandT = 0;
     potholePaid = 0;
+    consultantPaid = 0;
+    coleDay = 0;
     boeDay = 0;
     adDay = 0;
     currentDistrict = "plaza";
@@ -448,6 +463,12 @@
     voters = [];
     voterLoyalty = {};
     voterFavor = {};
+    rivalPressure = 0;
+    rivalStealsWeek = 0;
+    rivalStoleToday = false;
+    districtsVisitedToday = { plaza: true };
+    recruitsToday = 0;
+    boardTipId = null;
     upgraded = false;
     toolLevel = 0;
     lockedOpen = false;
@@ -501,6 +522,10 @@
       locked.color = "#3a3a55";
     }
     seedFlags = { permitAtMail: true };
+    districtsVisitedToday = { plaza: true };
+    recruitsToday = 0;
+    rivalStoleToday = false;
+    boardTipId = pickBoardTipId();
     const crisis = getCrisis();
     const rule = getBoardRule();
     const unlockedToday = DISTRICTS.filter((d) => d.id !== "plaza" && d.unlockDay === dayIndex).map((d) => d.name);
@@ -511,6 +536,10 @@
     if (isNewRun) log = [];
     pushLog(`Morning — Day ${dayIndex}. Crisis: ${crisis.title}. Rule: ${rule.title}.`);
     if (unlockedToday.length) pushLog("District open: " + unlockedToday.join(", ") + ".");
+    if (boardTipId) {
+      const tipG = VOTER_GROUPS.find((v) => v.id === boardTipId);
+      if (tipG) pushLog(`Board sticky: ${tipG.name} — ${tipG.recruitHint}`);
+    }
     // Policy bloc permit ease: free small progress chance
     const coal = activeCoalition();
     if (coal && coal.id === "policy" && Math.random() < 0.4) {
@@ -571,8 +600,14 @@
       dayLengthMode,
       ngPlusBonus,
       potholePaid,
+      consultantPaid,
+      coleDay,
       boeDay,
       adDay,
+      rivalPressure,
+      rivalStealsWeek,
+      boardTipId,
+      recruitsToday,
     };
   }
 
@@ -676,8 +711,15 @@
       if (data.dayLengthMode && DAY_LENGTHS[data.dayLengthMode]) dayLengthMode = data.dayLengthMode;
       if (typeof data.ngPlusBonus === "number") ngPlusBonus = data.ngPlusBonus;
       potholePaid = data.potholePaid | 0;
+      consultantPaid = data.consultantPaid | 0;
+      coleDay = data.coleDay | 0;
       boeDay = data.boeDay | 0;
       adDay = data.adDay | 0;
+      rivalPressure = clamp(data.rivalPressure | 0, 0, 8);
+      rivalStealsWeek = data.rivalStealsWeek | 0;
+      if (data.voterFavor) voterFavor = data.voterFavor;
+      boardTipId = data.boardTipId || boardTipId;
+      recruitsToday = data.recruitsToday | 0;
 
       if (data.midDay) {
         beginDay(false);
@@ -911,6 +953,91 @@
     return VOTER_GROUPS.filter((v) => !voters.includes(v.id)).length;
   }
 
+  function pickBoardTipId() {
+    const open = VOTER_GROUPS.filter((v) => !voters.includes(v.id));
+    if (!open.length) return null;
+    // Prefer least-favored (hardest / most neglected)
+    open.sort((a, b) => favorOf(a.id) - favorOf(b.id) || (b.favorNeed | 0) - (a.favorNeed | 0));
+    return open[0].id;
+  }
+
+  function atRiskVoters() {
+    return voters.filter((id) => (voterLoyalty[id] || 50) < 40);
+  }
+
+  function applyLoyaltyEndOfDay() {
+    // Mild drift — not a death spiral. Spat already hurt; this is maintenance.
+    const notes = [];
+    for (const id of voters.slice()) {
+      const g = VOTER_GROUPS.find((v) => v.id === id);
+      let d = Math.floor(Math.random() * 4) - 1; // -1..+2
+      // Heat-sensitive blocs get a small hit if Press Heat is spicy
+      if ((axes.heat || 0) >= 38 && g && (g.id === "lawn" || g.id === "wine" || g.id === "moderates" || g.id === "policy")) {
+        d -= 2;
+      }
+      // Chaos likes heat a little
+      if ((axes.heat || 0) >= 40 && g && g.id === "chaos") d += 1;
+      // Preferred character retains slightly
+      if (g && selected && g.preferred && g.preferred.includes(selected.id)) d += 1;
+      voterLoyalty[id] = clamp((voterLoyalty[id] || 50) + d, 8, 100);
+      if (voterLoyalty[id] < 40) notes.push(id);
+    }
+    return notes;
+  }
+
+  /**
+   * Light rival pressure. Caps: +1/day neglect, -1 when you travel out of plaza,
+   * steal at most 1/day and 2/week, only from loyalty < 28 when roster ≥ 5.
+   * Does not touch axes/coalitions math — only membership.
+   */
+  function applyRivalEndOfDay() {
+    let note = null;
+    // Neglect: unlocked districts you never stepped into
+    let neglected = 0;
+    for (const d of DISTRICTS) {
+      if (d.id === "plaza") continue;
+      if (dayIndex >= d.unlockDay && !districtsVisitedToday[d.id]) neglected++;
+    }
+    if (neglected >= 2 && dayIndex >= 2) {
+      rivalPressure = clamp(rivalPressure + 1, 0, 8);
+    } else if (neglected === 0 && dayIndex >= 2) {
+      rivalPressure = Math.max(0, rivalPressure - 1);
+    }
+
+    // Steal attempt — rare, soft
+    if (
+      !rivalStoleToday &&
+      rivalStealsWeek < 2 &&
+      rivalPressure >= 4 &&
+      voters.length >= 5 &&
+      dayIndex >= 3
+    ) {
+      const weak = voters
+        .map((id) => ({ id, L: voterLoyalty[id] || 50 }))
+        .filter((x) => x.L < 28)
+        .sort((a, b) => a.L - b.L);
+      if (weak.length) {
+        const steal = weak[0].id;
+        const g = VOTER_GROUPS.find((v) => v.id === steal);
+        voters = voters.filter((id) => id !== steal);
+        delete voterLoyalty[steal];
+        // leave a breadcrumb of favor so reclaim is possible
+        voterFavor[steal] = Math.max(0, (favorNeedOf(g) || 2) - 1);
+        rivalStoleToday = true;
+        rivalStealsWeek++;
+        rivalPressure = Math.max(0, rivalPressure - 2);
+        scandals.push("Rival nicked " + (g ? g.name : steal));
+        note = {
+          stolen: steal,
+          name: g ? g.name : steal,
+        };
+        pushLog(`${RIVAL_NAME} poached ${note.name} (loyalty too soft).`);
+        sfx("warn");
+      }
+    }
+    return note;
+  }
+
   /**
    * Daily objectives with adaptive voter targets.
    * "Recruit N more" = N *new* recruits *today* (objProg resets each morning).
@@ -1078,6 +1205,7 @@
     voterFavor[groupId] = need;
     voterLoyalty[groupId] = 55 + Math.floor(Math.random() * 20);
     if (g.preferred.includes(selected.id)) voterLoyalty[groupId] += 12;
+    recruitsToday = (recruitsToday | 0) + 1;
     bumpObj("voters", 1);
     addAxes({ street: 3, donor: g.id === "donors" || g.id === "crypto" ? 3 : 1, heat: g.id === "chaos" || g.id === "conspiracy" ? 2 : 0 });
     addCoins(3);
@@ -1312,6 +1440,34 @@
         unlockAchieve("grifted", "Grift Recognized");
       }
       sfx("blip");
+      return;
+    }
+
+    if (n.id === "consultant") {
+      if (coleDay === dayIndex) {
+        say("Invoice already filed today. Synergy has a cooldown.");
+        return;
+      }
+      if (coins < 15) {
+        say(n.lines.broke);
+        sfx("warn");
+        return;
+      }
+      coins -= 15;
+      coleDay = dayIndex;
+      consultantPaid++;
+      floatText(player.x, player.y - 20, "-15¢", "#ff8080");
+      const line = n.lines.sold[(consultantPaid - 1) % n.lines.sold.length];
+      say(line);
+      addAxes({ donor: 1, heat: consultantPaid >= 3 ? 1 : 0 });
+      pushLog(`Paid Consultant Cole 15¢ for a memo (#${consultantPaid}). Content: synergy-adjacent.`);
+      // Policy nerds hate empty memos; donors weirdly love them
+      bumpFavor("donors", 1);
+      if (consultantPaid >= 3) {
+        say(n.lines.exposed);
+        unlockAchieve("synergy", "Synergy Delivered");
+      }
+      sfx("coin");
       return;
     }
 
@@ -1550,6 +1706,22 @@
       }
       const coal = activeCoalition();
       if (coal) toast(`Active bloc: ${coal.name} — ${coal.bonus}`);
+      // Daily sticky: one uncommitted bloc + how to annoy them into joining
+      if (!boardTipId || voters.includes(boardTipId)) boardTipId = pickBoardTipId();
+      if (boardTipId) {
+        const tipG = VOTER_GROUPS.find((v) => v.id === boardTipId);
+        if (tipG) {
+          const fav = favorOf(tipG.id);
+          const need = favorNeedOf(tipG);
+          toast(`📌 STICKY: ${tipG.name} (${fav}/${need} favor) — ${tipG.recruitHint}`);
+          pushLog(`Board tip: ${tipG.name} · ${tipG.recruitHint}`);
+        }
+      } else {
+        toast("📌 STICKY: Coalition full. Hold the line — rival is watching neglect.");
+      }
+      if (rivalPressure >= 3) {
+        toast(`Rival pressure ${rivalPressure}/8 — visit unlocked districts or risk a soft poach.`);
+      }
       // Budget Watchers respect people who read the board (annoying, intentional)
       bumpFavor("budget", 1);
       return;
@@ -2058,10 +2230,9 @@
       setObj("home", 1);
       homeOk = true;
     }
-    // loyalty drift
-    for (const id of voters) {
-      voterLoyalty[id] = clamp((voterLoyalty[id] || 50) + Math.floor(Math.random() * 10 - 3), 10, 100);
-    }
+    // loyalty maintenance (mild) + light rival pressure
+    const riskIds = applyLoyaltyEndOfDay();
+    const rivalNote = applyRivalEndOfDay();
     const crisis = getCrisis();
     const daySummary = {
       day: dayIndex,
@@ -2078,15 +2249,27 @@
       objectives: currentObjectives().map((o) => ({
         label: o.label,
         done: objDone(o.id),
-        prog: objProg[o.id] || 0,
+        prog: o.id === "voters" ? recruitsToday : objProg[o.id] || 0,
         target: o.target,
+        // evening clarity: show true new-today count for recruit row
       })),
       homeOk,
       debateDone,
       debateWon,
       upgraded,
+      recruitsToday,
+      atRisk: riskIds.slice(),
+      rivalPressure,
+      rivalNote,
+      boardTipId,
+      remaining: remainingVoterCount(),
     };
     evening = daySummary;
+    if (rivalNote) {
+      toast(`${RIVAL_NAME} poached ${rivalNote.name}. Win them back with errands.`);
+    } else if (riskIds.length) {
+      toast(`Loyalty soft: ${riskIds.length} bloc(s) at risk. Watch Heat / spats.`);
+    }
     // mid-day flag false for save — evening continues to next morning
     state = "evening";
     // persist as end-of-day (not mid-day)
@@ -3014,8 +3197,9 @@
         ctx.font = "12px Segoe UI,sans-serif";
         fitText(known ? `${g.icon} ${g.name}` : "??? · ???", cx + 12, y, 170, "left");
         if (voters.includes(g.id)) {
-          ctx.fillStyle = "#8d8";
-          ctx.fillText("IN", cx + 250, y);
+          const L = voterLoyalty[g.id] || 0;
+          ctx.fillStyle = L < 40 ? "#e08080" : "#8d8";
+          ctx.fillText(L < 40 ? "⚠" + L : "IN", cx + 248, y);
         } else if (known) {
           const need = favorNeedOf(g);
           const fav = favorOf(g.id);
@@ -3026,8 +3210,11 @@
       });
       ctx.fillStyle = "#8878a8";
       ctx.font = "10px sans-serif";
+      const tipG = boardTipId && VOTER_GROUPS.find((v) => v.id === boardTipId);
       fitText(
-        "Favor = errands done. IN = joined. " + (scandals.length ? scandals.slice(-2).join(" · ") : "No scandals yet"),
+        tipG
+          ? `Board tip: ${tipG.name} · Favor=errands · ⚠=loyalty soft`
+          : "Favor=errands · IN/⚠=joined · Rival poaches soft loyalty",
         cx + 12,
         cy + ch - 16,
         cw - 24,
@@ -3288,6 +3475,7 @@
       ["ending_e4", "Ending: Money Machine"],
       ["five_star", "Five Achievements"],
       ["grifted", "Grift Recognized"],
+      ["synergy", "Synergy Delivered"],
     ];
     ctx.textAlign = "left";
     ctx.font = font(13);
@@ -3437,12 +3625,34 @@
     (e.objectives || []).forEach((o, i) => {
       ctx.fillStyle = o.done ? "#6d6" : "#e88";
       ctx.font = "13px Segoe UI,sans-serif";
-      fitText(`${o.done ? "✓" : "✗"} ${o.label}`, 80, 248 + i * 22, 420, "left");
+      const prog =
+        o.target === 0
+          ? ""
+          : o.id === "voters"
+            ? ` · new today ${e.recruitsToday | 0}/${o.target}`
+            : o.prog != null
+              ? ` · ${o.prog}/${o.target}`
+              : "";
+      fitText(`${o.done ? "✓" : "✗"} ${o.label}${prog}`, 80, 248 + i * 22, 420, "left");
     });
+    // Meta clarity strip under objectives
+    ctx.fillStyle = "#a8c0e0";
+    ctx.font = "11px Segoe UI,sans-serif";
+    fitText(
+      `New joins today: ${e.recruitsToday | 0} · Uncommitted left: ${e.remaining != null ? e.remaining : "—"} · Rival ${e.rivalPressure | 0}/8`,
+      80,
+      248 + Math.max(3, (e.objectives || []).length) * 22 + 8,
+      420,
+      "left"
+    );
+    if (e.rivalNote) {
+      ctx.fillStyle = "#e080a0";
+      fitText(`Poached: ${e.rivalNote.name} — reclaim with errands`, 80, 248 + Math.max(3, (e.objectives || []).length) * 22 + 26, 420, "left");
+    }
 
     ctx.fillStyle = "#ffb347";
     ctx.font = "bold 14px Segoe UI,sans-serif";
-    ctx.fillText("Voters", 560, 220);
+    ctx.fillText("Voters (loyalty)", 560, 220);
     if (!e.voters.length) {
       ctx.fillStyle = "#888";
       ctx.font = "13px sans-serif";
@@ -3451,19 +3661,24 @@
       e.voters.forEach((id, i) => {
         const g = VOTER_GROUPS.find((v) => v.id === id);
         if (!g) return;
-        ctx.fillStyle = g.color;
+        const L = e.loyalty[id] || 0;
+        const risk = L < 40;
+        ctx.fillStyle = risk ? "#e09090" : g.color;
         ctx.font = "13px Segoe UI,sans-serif";
-        fitText(`${g.icon} ${g.name} · ${e.loyalty[id] || 0}`, 560, 248 + i * 22, 340, "left");
+        fitText(`${g.icon} ${g.name} · ${L}${risk ? " ⚠" : ""}`, 560, 248 + i * 20, 340, "left");
       });
+    }
+    if (e.atRisk && e.atRisk.length) {
+      ctx.fillStyle = "#e0a080";
+      ctx.font = "11px Segoe UI,sans-serif";
+      fitText(`At risk (<40 loyalty): ${e.atRisk.length} — Heat & spats matter`, 560, 430, 340, "left");
     }
 
     if (e.debateDone) {
       ctx.fillStyle = e.debateWon ? "#8d8" : "#da8";
       ctx.font = "12px Segoe UI,sans-serif";
       ctx.textAlign = "left";
-      // Park under the voter list so it never paints over names
-      const debateY = 248 + Math.max(3, (e.voters || []).length) * 22 + 8;
-      ctx.fillText(e.debateWon ? "Plaza Debate: WIN" : "Plaza Debate: messy but present", 560, Math.min(debateY, 430));
+      ctx.fillText(e.debateWon ? "Plaza Debate: WIN" : "Plaza Debate: messy but present", 80, 430);
     }
 
     const last = e.day >= MAX_DAYS;
