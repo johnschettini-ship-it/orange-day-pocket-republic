@@ -281,7 +281,7 @@
   const BOARD_RULES = _D.BOARD_RULES;
   const MICRO_EVENTS = _D.MICRO_EVENTS;
   const POWER_RANK_COST = _D.POWER_RANK_COST;
-  const OBJECTIVES = _D.OBJECTIVES;
+  const DAILY_OBJECTIVES = _D.DAILY_OBJECTIVES;
   const CRISES = _D.CRISES;
   const MAP_W = _D.MAP_W;
   const MAP_H = _D.MAP_H;
@@ -486,7 +486,7 @@
     crateMoved = false;
     buttons = 0;
     // tool upgrade persists; locked door stays if already open this run
-    objProg = { permit: 0, buttons: 0, coffee: 0, voters: 0, home: 0, debate: 0 };
+    objProg = {}; // each id defaults to 0 via the ||0 reads in setObj/objDone
     BUTTON_SPOTS.forEach((b) => (b.taken = false));
     // reset crate position
     const crate = getZone("crate");
@@ -871,8 +871,11 @@
     if (n >= 0) addAxes({ street: n, donor: Math.floor(n * 0.25) });
     else addAxes({ street: n, heat: Math.ceil(-n * 0.5) });
   }
+  function currentObjectives() {
+    return DAILY_OBJECTIVES[dayIndex] || DAILY_OBJECTIVES[1];
+  }
   function setObj(id, v) {
-    const o = OBJECTIVES.find((x) => x.id === id);
+    const o = currentObjectives().find((x) => x.id === id);
     if (!o) return;
     objProg[id] = Math.min(o.target, v);
   }
@@ -880,11 +883,13 @@
     setObj(id, (objProg[id] || 0) + d);
   }
   function objDone(id) {
-    const o = OBJECTIVES.find((x) => x.id === id);
+    const o = currentObjectives().find((x) => x.id === id);
     return o && (objProg[id] || 0) >= o.target;
   }
   function allMainDone() {
-    return ["permit", "buttons", "coffee", "voters"].every(objDone);
+    return currentObjectives()
+      .filter((o) => o.id !== "home")
+      .every((o) => objDone(o.id));
   }
   function recruitChance(group) {
     let base = 0.55 * (selected.recruitMod || 1);
@@ -1267,6 +1272,7 @@
     }
 
     if (n.id === "anchor") {
+      bumpObj("media", 1);
       if (n.dayLines && n.dayLines[dayIndex]) say(n.dayLines[dayIndex]);
       else say(n.lines.default);
       if (!voters.includes("chaos") && Math.random() < 0.4) tryRecruit("chaos");
@@ -1314,6 +1320,7 @@
 
   function runScandalLeak() {
     setpieces.scandal = true;
+    bumpObj("scandal", 1);
     scandals.push("Day " + dayIndex + ": Scandal Leak");
     sfx("sting");
     punch(0.35);
@@ -1336,6 +1343,7 @@
 
   function runUnionMarch() {
     setpieces.march = true;
+    bumpObj("march", 1);
     sfx("sting");
     punch(0.3);
     const strong = voters.includes("union") || selected.id === "bernie" || selected.id === "alex";
@@ -1358,6 +1366,7 @@
 
   function runDonorGala() {
     setpieces.gala = true;
+    bumpObj("gala", 1);
     scandals.push("Day " + dayIndex + ": Gala optics");
     sfx("sting");
     punch(0.25);
@@ -1925,7 +1934,7 @@
       voters: voters.slice(),
       loyalty: { ...voterLoyalty },
       coalition: coalitionLabel(),
-      objectives: OBJECTIVES.map((o) => ({
+      objectives: currentObjectives().map((o) => ({
         label: o.label,
         done: objDone(o.id),
         prog: objProg[o.id] || 0,
@@ -2776,10 +2785,11 @@
 
     // objectives panel
     if (showObj) {
+      const objs = currentObjectives();
       const ox = 12,
         oy = 64,
         ow = 300;
-      const rows = OBJECTIVES.length;
+      const rows = objs.length;
       const oh = 28 + rows * 20;
       ctx.fillStyle = "rgba(20,12,30,0.78)";
       drawRounded(ox, oy, ow, oh, 8);
@@ -2790,7 +2800,7 @@
       ctx.font = "bold 12px Segoe UI,sans-serif";
       ctx.textAlign = "left";
       ctx.fillText(`Day ${dayIndex} Objectives  (Tab)`, ox + 12, oy + 18);
-      OBJECTIVES.forEach((o, i) => {
+      objs.forEach((o, i) => {
         const done = objDone(o.id);
         const p = objProg[o.id] || 0;
         ctx.fillStyle = done ? "#6d6" : "#e8d8f0";
@@ -2800,7 +2810,7 @@
         fitText(`${mark} ${label}  ${p}/${o.target}`, ox + 12, oy + 40 + i * 20, ow - 24, "left");
       });
       // crisis + debate hint under objectives
-      const extraY = oy + 40 + OBJECTIVES.length * 20 + 8;
+      const extraY = oy + 40 + objs.length * 20 + 8;
       ctx.fillStyle = "#ffb070";
       ctx.font = "10px Segoe UI,sans-serif";
       fitText(`Crisis: ${getCrisis().title}`, ox + 12, extraY, ow - 24, "left");
