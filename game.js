@@ -1178,6 +1178,7 @@
         addAxes({ street: -1 });
         pushLog("Paver Pete's potholes remain load-bearing. Conspiracy Cafe nods knowingly.");
         if (!voters.includes("conspiracy") && Math.random() < 0.6) tryRecruit("conspiracy");
+        unlockAchieve("grifted", "Grift Recognized");
       }
       sfx("blip");
       return;
@@ -3103,6 +3104,7 @@
       ["ending_e1", "Ending: Civic Darling"],
       ["ending_e4", "Ending: Money Machine"],
       ["five_star", "Five Achievements"],
+      ["grifted", "Grift Recognized"],
     ];
     ctx.textAlign = "left";
     ctx.font = font(13);
