@@ -9,6 +9,15 @@
   const W = canvas.width;
   const H = canvas.height;
   const touchEl = document.getElementById("touch");
+  const IS_COARSE = (typeof window.matchMedia === "function" && window.matchMedia("(pointer:coarse)").matches) || "ontouchstart" in window;
+  // Crisp rendering on high-DPI screens: scale the backing store, keep all
+  // draw/click code in logical 960x540 space via W/H.
+  const DPR = Math.min(Math.max(1, (typeof window.devicePixelRatio === "number" && window.devicePixelRatio) || 1), 3);
+  if (DPR > 1 && typeof ctx.scale === "function") {
+    canvas.width = W * DPR;
+    canvas.height = H * DPR;
+    ctx.scale(DPR, DPR);
+  }
 
   // ─── Constants ───────────────────────────────────────────────
   let DAY_SECONDS = 150; // tuned in beginDay; full week stays playable
@@ -2842,22 +2851,44 @@
       fitText("Scandals: " + (scandals.length ? scandals.slice(-3).join(" · ") : "none yet"), cx + 12, cy + ch - 16, cw - 24, "left");
     }
 
-    // toast
+    // toast — word-wrapped; larger on touch screens where the canvas shrinks
     if (msgT > 0 && msg) {
       ctx.globalAlpha = clamp(msgT > 0.3 ? 1 : msgT / 0.3, 0, 1);
-      const tw = Math.min(720, Math.max(180, 48 + msg.length * 6.5));
+      const fs = IS_COARSE ? 20 : 14;
+      const lineH = fs + 6;
+      ctx.font = (IS_COARSE ? "600 " : "") + fs + "px Segoe UI,sans-serif";
+      const maxTextW = (IS_COARSE ? W - 80 : 720) - 48;
+      const words = String(msg).split(" ");
+      const lines = [];
+      let line = "";
+      for (const wd of words) {
+        const test = line ? line + " " + wd : wd;
+        if (line && ctx.measureText(test).width > maxTextW) {
+          lines.push(line);
+          line = wd;
+          if (lines.length === 3) break;
+        } else {
+          line = test;
+        }
+      }
+      if (line && lines.length < 3) lines.push(line);
+      let widest = 0;
+      for (const l of lines) widest = Math.max(widest, ctx.measureText(l).width);
+      const tw = Math.max(180, widest + 48);
+      const th = lines.length * lineH + 22;
       const tx = W / 2 - tw / 2;
-      const ty = H - 74;
+      const ty = H - 40 - th;
       ctx.fillStyle = "rgba(25,14,36,0.92)";
-      drawRounded(tx, ty, tw, 44, 12);
+      drawRounded(tx, ty, tw, th, 12);
       ctx.fill();
       ctx.strokeStyle = "rgba(255,160,60,0.45)";
       ctx.lineWidth = 2;
       ctx.stroke();
       ctx.fillStyle = "#fff8e8";
-      ctx.font = "13px Segoe UI,sans-serif";
       ctx.textAlign = "center";
-      ctx.fillText(msg, W / 2, ty + 27);
+      lines.forEach((l, i) => {
+        ctx.fillText(l, W / 2, ty + 15 + fs * 0.5 + i * lineH);
+      });
       ctx.globalAlpha = 1;
     }
 
@@ -3795,8 +3826,8 @@
   canvas.addEventListener("click", (e) => {
     canvas.focus?.();
     const rect = canvas.getBoundingClientRect();
-    const sx = canvas.width / rect.width;
-    const sy = canvas.height / rect.height;
+    const sx = W / rect.width;
+    const sy = H / rect.height;
     const mx = (e.clientX - rect.left) * sx;
     const my = (e.clientY - rect.top) * sy;
 
