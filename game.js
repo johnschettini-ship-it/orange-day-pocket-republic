@@ -302,7 +302,9 @@
   // ─── State ───────────────────────────────────────────────────
   const keys = Object.create(null);
   let touchMove = { x: 0, y: 0 };
-  let state = "title"; // title | select | play | pause | evening | results
+  let state = "intro"; // intro | title | select | play | pause | evening | results
+  let introT = 0; // seconds into cold-open
+  const INTRO_DUR = 5.5; // auto-advance to title
   let charIdx = 0;
   let selected = null;
   let player = null;
@@ -3562,6 +3564,82 @@
     if (inv.length) ctx.fillText(inv.join("  "), 12, H - 12);
   }
 
+  function skipIntro() {
+    if (state !== "intro") return;
+    state = "title";
+    introT = INTRO_DUR;
+    ensureAudio();
+    sfx("ok");
+  }
+
+  /** In-engine cold open — always works (no external mp4). Slow zoom on key art. */
+  function drawIntro(dt) {
+    introT += dt || 1 / 60;
+    const t = clamp(introT / INTRO_DUR, 0, 1);
+    // ease-out
+    const e = 1 - Math.pow(1 - t, 2.2);
+    const zoom = 1.0 + 0.14 * e;
+
+    // night backdrop
+    const g = ctx.createLinearGradient(0, 0, W, H);
+    g.addColorStop(0, "#120820");
+    g.addColorStop(0.5, "#1a1840");
+    g.addColorStop(1, "#101828");
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    const baseW = 560,
+      baseH = 320;
+    const drawW = baseW * zoom,
+      drawH = baseH * zoom;
+    const dx = W / 2 - drawW / 2,
+      dy = H / 2 - drawH / 2 - 10;
+    ctx.save();
+    // soft vignette frame
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    drawRounded(dx - 8, dy - 8, drawW + 16, drawH + 16, 14);
+    ctx.fill();
+    if (!drawSprite("ui/key_art", dx, dy, drawW, drawH)) {
+      if (!drawSprite("ui/title_mascot", W / 2 - 40, H / 2 - 50, 80, 100)) {
+        ctx.fillStyle = "#ff8c28";
+        ctx.beginPath();
+        ctx.arc(W / 2, H / 2, 40, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    ctx.restore();
+
+    // Fade in title near the end
+    const titleA = clamp((t - 0.45) / 0.35, 0, 1);
+    if (titleA > 0) {
+      ctx.globalAlpha = titleA;
+      ctx.fillStyle = "rgba(20,12,30,0.55)";
+      drawRounded(W / 2 - 200, H - 150, 400, 70, 12);
+      ctx.fill();
+      ctx.fillStyle = "#fff";
+      ctx.font = "800 34px Segoe UI,sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("Orange Day", W / 2, H - 118);
+      ctx.fillStyle = "#ffb347";
+      ctx.font = "700 20px Segoe UI,sans-serif";
+      ctx.fillText("Pocket Republic", W / 2, H - 92);
+      ctx.globalAlpha = 1;
+    }
+
+    // Skip cue
+    const skipA = 0.35 + 0.35 * Math.sin(introT * 3);
+    ctx.globalAlpha = clamp(skipA, 0.25, 0.85);
+    ctx.fillStyle = "#c8b8d8";
+    ctx.font = "12px Segoe UI,sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("Click / Enter to skip", W / 2, H - 28);
+    ctx.globalAlpha = 1;
+
+    if (introT >= INTRO_DUR) {
+      state = "title";
+    }
+  }
+
   function drawTitle() {
     // deep civic night sky
     const g = ctx.createLinearGradient(0, 0, W, H);
@@ -4309,7 +4387,8 @@
   }
 
   function frame(dt) {
-    if (state === "title") drawTitle();
+    if (state === "intro") drawIntro(dt);
+    else if (state === "title") drawTitle();
     else if (state === "select") drawSelect();
     else if (state === "evening") drawEvening();
     else if (state === "results") drawResults();
@@ -4328,6 +4407,14 @@
   window.addEventListener("keydown", (e) => {
     keys[e.key] = true;
     keys[e.key.toLowerCase()] = true;
+
+    if (state === "intro") {
+      if (e.key === "Enter" || e.key === " " || e.key === "Escape") {
+        skipIntro();
+        e.preventDefault();
+      }
+      return;
+    }
 
     // Global overlays
     if (e.key === "o" || e.key === "O") {
@@ -4561,6 +4648,12 @@
   function handleCanvasPointer(e, fromTouch) {
     canvas.focus?.();
     const { mx, my } = canvasPoint(e);
+
+    if (state === "intro") {
+      skipIntro();
+      if (fromTouch && e.cancelable) e.preventDefault();
+      return true;
+    }
 
     if (showOptions || showGallery || showGlossary || showCredits) {
       showOptions = showGallery = showGlossary = showCredits = false;
