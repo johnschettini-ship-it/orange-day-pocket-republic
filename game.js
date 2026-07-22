@@ -3303,19 +3303,80 @@
     ctx.fillText("Click a card or press Enter", W / 2, H - 18);
   }
 
+  let pauseButtons = [];
+  const PAUSE_ITEMS = [
+    { id: "resume", label: "Resume", hint: "Esc" },
+    { id: "save", label: "Save", hint: "S" },
+    { id: "restart", label: "Restart run", hint: "R" },
+    { id: "options", label: "Options", hint: "O" },
+    { id: "gallery", label: "Achievement Gallery", hint: "G" },
+    { id: "glossary", label: "Glossary", hint: "H" },
+    { id: "credits", label: "Credits", hint: "I" },
+  ];
+
+  function pauseAction(id) {
+    if (id === "resume") state = "play";
+    else if (id === "save") toast(saveGame() ? "Saved." : "Save failed.");
+    else if (id === "restart") {
+      clearSave();
+      state = "select";
+    } else if (id === "options") showOptions = true;
+    else if (id === "gallery") showGallery = true;
+    else if (id === "glossary") showGlossary = true;
+    else if (id === "credits") showCredits = true;
+  }
+
   function drawPause() {
     ctx.fillStyle = "rgba(10,8,20,0.72)";
     ctx.fillRect(0, 0, W, H);
+
+    const panelW = 380,
+      panelX = W / 2 - panelW / 2,
+      panelY = 70,
+      panelH = 424;
+    ctx.fillStyle = "rgba(30,20,50,0.95)";
+    drawRounded(panelX, panelY, panelW, panelH, 14);
+    ctx.fill();
+    ctx.strokeStyle = "#ff9a3c";
+    ctx.lineWidth = 2;
+    drawRounded(panelX, panelY, panelW, panelH, 14);
+    ctx.stroke();
+
     ctx.fillStyle = "#fff";
-    ctx.font = "bold 32px Segoe UI,sans-serif";
+    ctx.font = font(26, "bold");
     ctx.textAlign = "center";
-    ctx.fillText("Paused", W / 2, H / 2 - 28);
-    ctx.font = "14px Segoe UI,sans-serif";
-    ctx.fillStyle = "#c8b8d8";
-    ctx.fillText("Esc — resume · S — save · R — restart · O — options", W / 2, H / 2 + 8);
-    ctx.fillText("Tab objectives · C codex · E interact · Q power", W / 2, H / 2 + 32);
-    ctx.fillText("Gamepad: stick · A interact · X power · Start pause", W / 2, H / 2 + 56);
-    ctx.fillText("Sleep at HOME · 7-day week · " + BUILD_ID, W / 2, H / 2 + 80);
+    ctx.fillText("Paused", W / 2, panelY + 38);
+
+    pauseButtons = [];
+    const btnW = panelW - 48,
+      btnX = panelX + 24,
+      btnH = 40,
+      gap = 9;
+    let by = panelY + 60;
+    PAUSE_ITEMS.forEach((it) => {
+      ctx.fillStyle = "rgba(255,154,60,0.12)";
+      drawRounded(btnX, by, btnW, btnH, 8);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,154,60,0.5)";
+      ctx.lineWidth = 1;
+      drawRounded(btnX, by, btnW, btnH, 8);
+      ctx.stroke();
+      ctx.fillStyle = "#ffe8c0";
+      ctx.font = font(15, "600");
+      ctx.textAlign = "left";
+      ctx.fillText(it.label, btnX + 16, by + btnH / 2 + 5);
+      ctx.fillStyle = "#c8b8d8";
+      ctx.font = font(12);
+      ctx.textAlign = "right";
+      ctx.fillText(it.hint, btnX + btnW - 14, by + btnH / 2 + 4);
+      pauseButtons.push({ id: it.id, x: btnX, y: by, w: btnW, h: btnH });
+      by += btnH + gap;
+    });
+
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#8a7898";
+    ctx.font = font(11);
+    ctx.fillText("Sleep at HOME · 7-day week · " + BUILD_ID, W / 2, panelY + panelH - 14);
   }
 
   function drawResults() {
@@ -3643,14 +3704,9 @@
         else stopMusic();
       }
     } else if (state === "pause") {
-      if (e.key === "Escape") {
-        state = "play";
-      } else if (e.key === "s" || e.key === "S") {
-        toast(saveGame() ? "Saved." : "Save failed.");
-      } else if (e.key === "r" || e.key === "R") {
-        clearSave();
-        state = "select";
-      }
+      if (e.key === "Escape") pauseAction("resume");
+      else if (e.key === "s" || e.key === "S") pauseAction("save");
+      else if (e.key === "r" || e.key === "R") pauseAction("restart");
     }
   });
   window.addEventListener("keyup", (e) => {
@@ -3665,6 +3721,16 @@
     const sy = canvas.height / rect.height;
     const mx = (e.clientX - rect.left) * sx;
     const my = (e.clientY - rect.top) * sy;
+
+    if (showOptions || showGallery || showGlossary || showCredits) {
+      showOptions = showGallery = showGlossary = showCredits = false;
+      return;
+    }
+    if (state === "pause") {
+      const hit = pauseButtons.find((b) => mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h);
+      if (hit) pauseAction(hit.id);
+      return;
+    }
 
     if (state === "title") {
       ensureAudio();
@@ -3780,6 +3846,15 @@
       const v = getZone("vending");
       if (v && player && inZone(player.x, player.y, v, 24) && !upgraded && coins >= upgradePrice()) buyUpgrade();
       else usePower();
+    });
+    touchEl.querySelector('[data-act="obj"]').addEventListener("click", () => {
+      if (state !== "play") return;
+      showObj = !showObj;
+      showCodex = false;
+    });
+    touchEl.querySelector('[data-act="menu"]').addEventListener("click", () => {
+      if (state === "play") state = "pause";
+      else if (state === "pause") pauseAction("resume");
     });
   }
   setupTouch();

@@ -70,6 +70,8 @@ canvas{
   box-shadow:0 4px 12px rgba(0,0,0,.35);
 }
 .touch .act.power{right:20%;bottom:10%;width:56px;height:56px;font-size:11px}
+.touch .act.obj{top:3%;left:4%;bottom:auto;right:auto;width:44px;height:44px;font-size:10px;border-radius:10px}
+.touch .act.menu{top:3%;right:4%;bottom:auto;left:auto;width:44px;height:44px;font-size:16px;border-radius:10px}
 @media (max-width:900px),(pointer:coarse){
   .touch.on{display:block}
   .hint{font-size:10px}
