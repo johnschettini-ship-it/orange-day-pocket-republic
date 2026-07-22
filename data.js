@@ -101,6 +101,8 @@ const CHARACTERS = [
   },
 ];
 
+// favorNeed = how many dedicated task pings before a recruit roll is even allowed.
+// Soft blocs: 2. Stubborn late-game / moneyed: 3. One-shot errands (crate/permit): 1.
 const VOTER_GROUPS = [
   {
     id: "crypto",
@@ -112,7 +114,8 @@ const VOTER_GROUPS = [
     preferred: ["tiny", "mayor"],
     rival: "budget",
     passive: { coinMult: 1.15 },
-    recruitHint: "Hype a tech gimmick near the vending machine.",
+    favorNeed: 2,
+    recruitHint: "Buy from VEND twice (they only respect spend).",
   },
   {
     id: "wine",
@@ -124,7 +127,8 @@ const VOTER_GROUPS = [
     preferred: ["alex", "mayor"],
     rival: "patriots",
     passive: { repMult: 1.2 },
-    recruitHint: "Help at the park or stage with something wholesome.",
+    favorNeed: 2,
+    recruitHint: "Fix coffee AND chat at the park. Two wholesome errands.",
   },
   {
     id: "students",
@@ -136,7 +140,8 @@ const VOTER_GROUPS = [
     preferred: ["alex"],
     rival: "donors",
     passive: { recruitBoost: 0.15 },
-    recruitHint: "Join or start a micro-rally at the civic stage.",
+    favorNeed: 2,
+    recruitHint: "Rally (Q) at STAGE and/or win the Plaza Debate.",
   },
   {
     id: "union",
@@ -148,7 +153,8 @@ const VOTER_GROUPS = [
     preferred: ["mayor", "alex"],
     rival: "donors",
     passive: { repairBoost: true },
-    recruitHint: "Help move the oversized object near the mailbox.",
+    favorNeed: 1,
+    recruitHint: "Help Flo shove the oversized CRATE. No shortcuts.",
   },
   {
     id: "moderates",
@@ -160,7 +166,8 @@ const VOTER_GROUPS = [
     preferred: ["mayor", "tiny"],
     rival: "chaos",
     passive: { repShield: 2 },
-    recruitHint: "Deliver the permit cleanly. No spectacle required.",
+    favorNeed: 1,
+    recruitHint: "Deliver the lost permit to Town Hall. Cleanly.",
   },
   {
     id: "chaos",
@@ -172,7 +179,8 @@ const VOTER_GROUPS = [
     preferred: ["tiny", "alex"],
     rival: "moderates",
     passive: { viral: true },
-    recruitHint: "Cause a harmless scene at the campaign booth.",
+    favorNeed: 2,
+    recruitHint: "Cause a scene at the BOOTH twice (spectacle tax).",
   },
   {
     id: "donors",
@@ -184,7 +192,8 @@ const VOTER_GROUPS = [
     preferred: ["mayor", "tiny"],
     rival: "students",
     passive: { shopDiscount: 0.15, donorBias: true },
-    recruitHint: "Flash coins near the vending machine or mayor lobby.",
+    favorNeed: 3,
+    recruitHint: "Bleed coins: VEND buys, Ad Desk, Pitch Pavilion, or Gala.",
   },
   {
     id: "conspiracy",
@@ -196,7 +205,8 @@ const VOTER_GROUPS = [
     preferred: ["tiny", "bernie"],
     rival: "budget",
     passive: { rumor: true },
-    recruitHint: "Poke the alley or tunnel and look like you know secrets.",
+    favorNeed: 2,
+    recruitHint: "Alley + tunnel secrets, or expose Paver Pete (4 payments).",
   },
   {
     id: "budget",
@@ -208,7 +218,8 @@ const VOTER_GROUPS = [
     preferred: ["mayor", "bernie"],
     rival: "crypto",
     passive: { cheapUpgrades: true },
-    recruitHint: "Buy the tool upgrade thriftily; avoid wasteful spectacle.",
+    favorNeed: 2,
+    recruitHint: "Check BOARD twice and buy the thrifty VEND tool upgrade.",
   },
   {
     id: "patriots",
@@ -220,7 +231,8 @@ const VOTER_GROUPS = [
     preferred: ["donny", "leon"],
     rival: "wine",
     passive: { intimidate: true },
-    recruitHint: "Cause spectacle at booth or Media Alley.",
+    favorNeed: 3,
+    recruitHint: "Media Alley spectacle: Anchor, Ad Desk, booth heat.",
   },
   {
     id: "policy",
@@ -232,7 +244,8 @@ const VOTER_GROUPS = [
     preferred: ["mayor", "alex"],
     rival: "conspiracy",
     passive: { policy: true },
-    recruitHint: "Clean permit runs and Policy Bloc plays.",
+    favorNeed: 3,
+    recruitHint: "Permit delivered + Board of Ed lunch + petition paperwork.",
   },
   {
     id: "lawn",
@@ -244,7 +257,8 @@ const VOTER_GROUPS = [
     preferred: ["bernie", "mayor"],
     rival: "chaos",
     passive: { stabilize: true },
-    recruitHint: "Keep the park calm; avoid late scandals.",
+    favorNeed: 2,
+    recruitHint: "Visit PARK twice without high Heat chaos.",
   },
 ];
 

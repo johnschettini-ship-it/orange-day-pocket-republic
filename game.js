@@ -329,6 +329,7 @@
   let objProg = {};
   let voters = []; // recruited group ids
   let voterLoyalty = {};
+  let voterFavor = {}; // id -> task pings toward favorNeed (must grind errands to recruit)
   let hasPermit = false;
   let permitDelivered = false;
   let coffeeFixed = false;
@@ -446,6 +447,7 @@
     lateNights = 0;
     voters = [];
     voterLoyalty = {};
+    voterFavor = {};
     upgraded = false;
     toolLevel = 0;
     lockedOpen = false;
@@ -538,6 +540,7 @@
       lateNights,
       voters: voters.slice(),
       voterLoyalty: { ...voterLoyalty },
+      voterFavor: { ...voterFavor },
       upgraded,
       toolLevel,
       lockedOpen,
@@ -652,6 +655,12 @@
         codexSeen[id] = true;
       });
       voterLoyalty = data.voterLoyalty || {};
+      voterFavor = data.voterFavor || {};
+      // Recruited blocs count as fully favored
+      voters.forEach((id) => {
+        const g = VOTER_GROUPS.find((v) => v.id === id);
+        if (g) voterFavor[id] = favorNeedOf(g);
+      });
       upgraded = !!data.upgraded;
       toolLevel = data.toolLevel | 0;
       lockedOpen = !!data.lockedOpen;
@@ -760,6 +769,7 @@
     queueTip("gates", "District gates unlock later: Media D2 · Campus D3 · Donors D4.");
     queueTip("codex", "C = voter codex · G = achievements · H = glossary · O = options.");
     queueTip("slots", "Title screen: keys 1/2/3 pick a save slot before Continue.");
+    queueTip("favor", "Voters need ERRANDS (favor), not small talk. Check codex hints.");
   }
 
   // ─── Helpers ─────────────────────────────────────────────────
@@ -964,23 +974,56 @@
       .filter((o) => o.id !== "home")
       .every((o) => objDone(o.id));
   }
+  function favorNeedOf(group) {
+    return Math.max(1, (group && group.favorNeed) | 0 || 2);
+  }
+
+  function favorOf(id) {
+    return voterFavor[id] | 0;
+  }
+
+  /**
+   * Earn a task ping toward a bloc. Completing favorNeed unlocks a recruit
+   * roll (or auto-joins if autoJoin). No more free "talk once" coalition.
+   */
+  function bumpFavor(groupId, amount = 1, opts = {}) {
+    if (voters.includes(groupId)) return false;
+    const g = VOTER_GROUPS.find((v) => v.id === groupId);
+    if (!g) return false;
+    const need = favorNeedOf(g);
+    const before = favorOf(groupId);
+    if (before >= need && !opts.forceRoll) return false;
+    voterFavor[groupId] = Math.min(need, before + Math.max(1, amount | 0));
+    codexSeen[groupId] = true;
+    const fav = favorOf(groupId);
+    if (fav < need) {
+      toast(`${g.name}: favor ${fav}/${need}. ${g.recruitHint}`);
+      floatText(player.x, player.y - 36, `${g.icon || ""} ${fav}/${need}`, g.color);
+      sfx("blip");
+      return false;
+    }
+    // Threshold met — attempt join (force for one-shot hard errands like crate/permit)
+    return tryRecruit(groupId, !!opts.autoJoin);
+  }
+
   function recruitChance(group) {
-    let base = 0.55 * (selected.recruitMod || 1);
+    // Harder baseline: even after errands, not a free win
+    let base = 0.38 * (selected.recruitMod || 1);
     base += getCrisis().recruitMod || 0;
     const coal = activeCoalition();
-    if (coal && coal.id === "policy") base -= 0.12;
-    if (group.preferred.includes(selected.id)) base += 0.25;
-    if (voters.includes("students")) base += 0.1;
-    if (rallyT > 0 && selected.powerKey === "rally") base += 0.2 + powerRank * 0.08;
+    if (coal && coal.id === "policy") base -= 0.1;
+    if (group.preferred.includes(selected.id)) base += 0.18;
+    if (voters.includes("students")) base += 0.06;
+    if (rallyT > 0 && selected.powerKey === "rally") base += 0.12 + powerRank * 0.05;
     if (selected.powerKey === "squeeze" && group.id !== "crypto") base -= 0.05;
-    if (group.rival && voters.includes(group.rival)) base -= 0.2;
-    // board rule: open mic near stage
+    if (group.rival && voters.includes(group.rival)) base -= 0.18;
     const rule = getBoardRule();
     if (rule.recruitNearStage && player) {
       const st = getZone("stage");
-      if (st && inZone(player.x, player.y, st, 50)) base += rule.recruitNearStage;
+      if (st && inZone(player.x, player.y, st, 50)) base += (rule.recruitNearStage || 0) * 0.7;
     }
-    return clamp(base, 0.12, 0.95);
+    // Slight bonus for over-grinding favor past need (capped at need so N/A) — prefer character fit
+    return clamp(base, 0.1, 0.82);
   }
 
   function triggerRivalSpat(newId) {
@@ -1008,21 +1051,33 @@
 
   function tryRecruit(groupId, force = false) {
     if (voters.includes(groupId)) {
-      toast("Already in your coalition.");
       return false;
     }
     const g = VOTER_GROUPS.find((v) => v.id === groupId);
     if (!g) return false;
+    const need = favorNeedOf(g);
+    const fav = favorOf(groupId);
+    // Task gate: no free joins from ambient chat unless force (setpiece / QA)
+    if (!force && fav < need) {
+      toast(`${g.name} want errands first (${fav}/${need}). ${g.recruitHint}`);
+      codexSeen[groupId] = true;
+      sfx("warn");
+      return false;
+    }
     const chance = force ? 1 : recruitChance(g);
     if (Math.random() > chance && !force) {
-      toast(`${g.name} hesitate. Try again or use your power.`);
-      addAxes({ street: -1 });
+      // Failed roll after grinding — lose a favor so they stay annoying
+      voterFavor[groupId] = Math.max(0, fav - 1);
+      toast(`${g.name} still need convincing. Favor now ${voterFavor[groupId]}/${need}. Keep grinding.`);
+      addAxes({ street: -1, heat: 1 });
+      sfx("warn");
       return false;
     }
     voters.push(groupId);
     codexSeen[groupId] = true;
-    voterLoyalty[groupId] = 60 + Math.floor(Math.random() * 25);
-    if (g.preferred.includes(selected.id)) voterLoyalty[groupId] += 15;
+    voterFavor[groupId] = need;
+    voterLoyalty[groupId] = 55 + Math.floor(Math.random() * 20);
+    if (g.preferred.includes(selected.id)) voterLoyalty[groupId] += 12;
     bumpObj("voters", 1);
     addAxes({ street: 3, donor: g.id === "donors" || g.id === "crypto" ? 3 : 1, heat: g.id === "chaos" || g.id === "conspiracy" ? 2 : 0 });
     addCoins(3);
@@ -1032,7 +1087,7 @@
     banner(activeCoalition() ? activeCoalition().name : "New ally!", g.color, 1.8);
     sfx("recruit");
     punch(0.25);
-    pushLog(`Recruited ${g.name}. Loyalty ${voterLoyalty[groupId]}.`);
+    pushLog(`Recruited ${g.name} after errands (${need} favor). Loyalty ${voterLoyalty[groupId]}.`);
     toast(`Coalition grows: ${g.name} joined!`);
     if (g.rival && voters.includes(g.rival)) triggerRivalSpat(groupId);
     checkAchievements();
@@ -1186,7 +1241,9 @@
         say(n.lines.permit);
         sfx("ok");
         pushLog("Permit delivered to Town Hall. Bureaucracy smiles (rare).");
-        tryRecruit("moderates", selected.id === "mayor" || Math.random() < 0.55);
+        // One clean permit run earns Moderates (and a policy ping)
+        bumpFavor("moderates", 1, { autoJoin: true });
+        bumpFavor("policy", 1);
         return;
       }
       say(n.lines.default);
@@ -1197,6 +1254,7 @@
       if (coffeeFixed) {
         say(n.lines.done);
         addCoins(1);
+        bumpFavor("wine", 1); // second ping after fix — still have to visit park
         return;
       }
       coffeeFixed = true;
@@ -1207,7 +1265,7 @@
       say(n.lines.fix);
       sfx("ok");
       pushLog("Coffee cart restored. Civic metabolism online.");
-      if (!voters.includes("wine") && Math.random() < 0.5) tryRecruit("wine");
+      bumpFavor("wine", 1);
       return;
     }
 
@@ -1227,15 +1285,9 @@
         addCoins(2);
         say("Mystery snack. Refund glitch.");
       }
-      if (!voters.includes("crypto")) {
-        const ok = tryRecruit("crypto");
-        if (!ok) say(n.lines.default);
-      } else if (!voters.includes("donors") && coins >= 12) {
-        tryRecruit("donors", selected.id === "mayor" || Math.random() < 0.5);
-        say("A suit materializes. Corporate Donors like the clink of coins.");
-      } else {
-        say("Crypto Bros nod like it's an oracle.");
-      }
+      // Spending is the errand — not free coalition
+      bumpFavor("crypto", 1);
+      if (price >= 5) bumpFavor("donors", 1);
       return;
     }
 
@@ -1251,11 +1303,12 @@
       if (potholePaid <= 3) {
         say(potholePaid === 1 ? n.lines.default : n.lines.excuses[(potholePaid - 2) % n.lines.excuses.length]);
         pushLog(`Paid Paver Pete 10¢ for pothole repair (total: ${potholePaid * 10}¢). Potholes: unchanged.`);
+        if (potholePaid === 3) bumpFavor("conspiracy", 1); // they're watching the grift
       } else {
         say(n.lines.exposed);
         addAxes({ street: -1 });
         pushLog("Paver Pete's potholes remain load-bearing. Conspiracy Cafe nods knowingly.");
-        if (!voters.includes("conspiracy") && Math.random() < 0.6) tryRecruit("conspiracy");
+        bumpFavor("conspiracy", 1, { autoJoin: favorOf("conspiracy") + 1 >= 2 });
         unlockAchieve("grifted", "Grift Recognized");
       }
       sfx("blip");
@@ -1275,7 +1328,8 @@
       say(n.lines.help);
       sfx("ok");
       pushLog("Oversized crate relocated. Gravity remains undefeated.");
-      tryRecruit("union", true);
+      // Hard errand = full union join
+      bumpFavor("union", 1, { autoJoin: true });
       return;
     }
 
@@ -1286,11 +1340,12 @@
         return;
       }
       if (!voters.includes("students")) {
-        if (selected.powerKey === "rally" || rallyT > 0 || Math.random() < recruitChance(VOTER_GROUPS.find((v) => v.id === "students"))) {
-          tryRecruit("students", selected.id === "alex");
-          say(n.lines.rally);
+        if (selected.powerKey === "rally" || rallyT > 0) {
+          bumpFavor("students", 1);
+          say(n.lines.rally || "They noticed the rally energy. Come back after Debate or another push.");
         } else {
-          say("Crowd scrolls past. Try Rally Cry (Q).");
+          say("Crowd scrolls past. Hit Q (Rally) near the stage, or run the Plaza Debate.");
+          sfx("warn");
         }
       } else if (debateDone) {
         say(debateWon ? "That debate still echoes. Nicely done." : "Stage is quieter after the dust-up.");
@@ -1301,36 +1356,29 @@
     }
 
     if (n.id === "boothie") {
-      if (!voters.includes("chaos")) {
-        addRep(selected.id === "tiny" ? 1 : 2);
-        addCoins(3);
-        tryRecruit("chaos", Math.random() < 0.7 || selected.id === "tiny");
-        say(n.lines.chaos);
-        if (voters.includes("wine")) {
-          voterLoyalty.wine = Math.max(15, (voterLoyalty.wine || 50) - 10);
-          addRep(-2);
-          pushLog("Wine Moms side-eye the spectacle.");
-        }
-      } else {
-        if (buttons < 3) {
-          buttons++;
-          bumpObj("buttons", 1);
-          say("Another button. Artisanal.");
-        } else {
-          say(n.lines.default);
-        }
+      addRep(selected.id === "tiny" ? 1 : 2);
+      addCoins(2);
+      addAxes({ heat: 1 });
+      bumpFavor("chaos", 1);
+      bumpFavor("patriots", 1);
+      say(n.lines.chaos || n.lines.default);
+      if (voters.includes("wine")) {
+        voterLoyalty.wine = Math.max(15, (voterLoyalty.wine || 50) - 8);
+        pushLog("Wine Moms side-eye the spectacle.");
+      }
+      if (buttons < 3 && Math.random() < 0.4) {
+        buttons++;
+        bumpObj("buttons", 1);
       }
       return;
     }
 
     if (n.id === "parkgoer") {
-      if (!voters.includes("wine")) {
-        addRep(2);
-        tryRecruit("wine", selected.id === "alex" || selected.id === "mayor" || Math.random() < 0.6);
-        say(voters.includes("wine") ? n.lines.wine : n.lines.default);
-      } else {
-        say(n.lines.default);
-      }
+      addRep(2);
+      bumpFavor("wine", 1);
+      if ((axes.heat || 0) < 25) bumpFavor("lawn", 1);
+      else toast("Lawn Guardians side-eye your Heat. Cool off before park rounds count.");
+      say(n.lines.wine || n.lines.default);
       return;
     }
 
@@ -1339,8 +1387,8 @@
       if (n.dayLines && n.dayLines[dayIndex]) say(n.dayLines[dayIndex]);
       else if (!hasPermit && !permitDelivered) say("LOST PERMIT near the Oversized Mailbox.");
       else say(n.lines.default);
-      if (!voters.includes("budget") && dayIndex >= 2) tryRecruit("budget", Math.random() < 0.4);
-      if (!voters.includes("policy") && permitDelivered) tryRecruit("policy", selected.id === "mayor" || Math.random() < 0.35);
+      // Board thrice is the austere errand path
+      if (dayIndex >= 1) bumpFavor("budget", 1);
       return;
     }
 
@@ -1348,8 +1396,8 @@
       bumpObj("media", 1);
       if (n.dayLines && n.dayLines[dayIndex]) say(n.dayLines[dayIndex]);
       else say(n.lines.default);
-      if (!voters.includes("chaos") && Math.random() < 0.4) tryRecruit("chaos");
-      if (!voters.includes("patriots") && Math.random() < 0.3) tryRecruit("patriots");
+      bumpFavor("patriots", 1);
+      bumpFavor("chaos", 1);
       return;
     }
 
@@ -1360,7 +1408,7 @@
       }
       if (n.dayLines && n.dayLines[dayIndex]) say(n.dayLines[dayIndex]);
       else say(n.lines.default);
-      if (!voters.includes("conspiracy")) tryRecruit("conspiracy", Math.random() < 0.5);
+      bumpFavor("conspiracy", 1);
       return;
     }
 
@@ -1371,8 +1419,8 @@
       }
       if (n.dayLines && n.dayLines[dayIndex]) say(n.dayLines[dayIndex]);
       else say(n.lines.default);
-      if (!voters.includes("students")) tryRecruit("students", selected.id === "alex" || Math.random() < 0.45);
-      if (!voters.includes("lawn") && Math.random() < 0.35) tryRecruit("lawn");
+      bumpFavor("students", 1);
+      bumpFavor("lawn", 1);
       return;
     }
 
@@ -1383,7 +1431,7 @@
       }
       if (n.dayLines && n.dayLines[dayIndex]) say(n.dayLines[dayIndex]);
       else say(n.lines.default);
-      if (!voters.includes("donors")) tryRecruit("donors", selected.id === "donny" || Math.random() < 0.5);
+      bumpFavor("donors", 1);
       return;
     }
 
@@ -1410,7 +1458,8 @@
       toast("Scandal Leak: the story sticks. Heat soars.");
       pushLog("Took a scandal hit from Media Alley.");
     }
-    if (!voters.includes("conspiracy")) tryRecruit("conspiracy", true);
+    // Leak is a real errand — big conspiracy favor, join if fully warmed
+    bumpFavor("conspiracy", 2, { autoJoin: true });
     saveGame();
   }
 
@@ -1425,13 +1474,13 @@
       addCoins(7);
       banner("MARCH SUCCESS", "#e07040", 2);
       toast("Union March: the route holds. Street Cred surges.");
-      tryRecruit("union", true);
-      if (!voters.includes("students")) tryRecruit("students");
+      bumpFavor("union", 1, { autoJoin: true });
+      bumpFavor("students", 1);
     } else {
       addAxes({ street: 2, heat: 2 });
       banner("MARCH MUDDY", "#c09070", 2);
       toast("Union March: muddy message, still feet on pavement.");
-      if (!voters.includes("union")) tryRecruit("union", Math.random() < 0.5);
+      bumpFavor("union", 1);
     }
     pushLog("Campus Union March resolved.");
     saveGame();
@@ -1449,14 +1498,14 @@
       addCoins(12);
       banner("GALA WIN", "#e8c040", 2);
       toast("Donor Gala: you own the room. Donor Trust spikes; Heat follows.");
-      tryRecruit("donors", true);
-      if (!voters.includes("patriots") && Math.random() < 0.4) tryRecruit("patriots");
+      bumpFavor("donors", 2, { autoJoin: true });
+      bumpFavor("patriots", 1);
     } else {
       addAxes({ donor: 3, heat: 2 });
       addCoins(5);
       banner("GALA RSVP", "#c0a060", 2);
       toast("Donor Gala: you survive the canapés. Mild Donor bump.");
-      if (!voters.includes("donors")) tryRecruit("donors", Math.random() < 0.55);
+      bumpFavor("donors", 1);
     }
     pushLog("Donor Gala night logged.");
     saveGame();
@@ -1501,6 +1550,8 @@
       }
       const coal = activeCoalition();
       if (coal) toast(`Active bloc: ${coal.name} — ${coal.bonus}`);
+      // Budget Watchers respect people who read the board (annoying, intentional)
+      bumpFavor("budget", 1);
       return;
     }
 
@@ -1583,9 +1634,7 @@
       player.y = 400;
       toast("Alley shortcut! You emerge near the plaza, slightly stickier.");
       burst(player.x, player.y, "#888", 8);
-      if (!voters.includes("conspiracy") && Math.random() < 0.55) {
-        tryRecruit("conspiracy", selected.id === "tiny" || selected.id === "bernie");
-      }
+      bumpFavor("conspiracy", 1);
       return;
     }
 
@@ -1616,7 +1665,7 @@
       toast("MICROTRANSACTION: Board of Ed lunch — $2.99 REAL MONEY... card declined (campaign finance law). 12¢ petty cash it is.");
       pushLog("Took the Board of Education to lunch. They ordered the salmon. Policy discussed: none.");
       burst(player.x, player.y, "#d0c060", 12);
-      if (!voters.includes("policy") && Math.random() < 0.6) tryRecruit("policy", selected.id === "mayor" || selected.id === "donny");
+      bumpFavor("policy", 1);
       sfx("ok");
       return;
     }
@@ -1638,8 +1687,8 @@
       toast("MICROTRANSACTION: 30s ad buy — $4.99 REAL MONEY... payment processor laughed. 20¢ petty cash. Your ad airs at 3am.");
       pushLog("Bought 30 seconds of ad time. The jingle is already stuck in four demographics.");
       burst(player.x, player.y, "#e080c0", 14);
-      if (!voters.includes("moderates") && Math.random() < 0.5) tryRecruit("moderates");
-      if (!voters.includes("patriots") && Math.random() < 0.35) tryRecruit("patriots");
+      bumpFavor("patriots", 1);
+      bumpFavor("donors", 1);
       sfx("ok");
       return;
     }
@@ -1666,6 +1715,7 @@
             }
             toast("Tunnel stash: a dusty campaign button.");
           }
+          bumpFavor("conspiracy", 1);
         } else {
           player.x = 130;
           player.y = 450;
@@ -1708,8 +1758,11 @@
     if (z.id === "quad" || z.id === "petition") {
       const a = NPCS.find((n) => n.id === "ra");
       if (a) talkNpc(a);
-      if (z.id === "petition" && !voters.includes("students")) tryRecruit("students", Math.random() < 0.5);
-      if (z.id === "petition" && !voters.includes("policy") && Math.random() < 0.35) tryRecruit("policy");
+      if (z.id === "petition") {
+        bumpFavor("students", 1);
+        bumpFavor("policy", 1);
+        toast("You fill out a triplicate petition. Joy.");
+      }
       return;
     }
     if (z.id === "march") {
@@ -1722,7 +1775,17 @@
       if (getCrisis().galaDay && !setpieces.gala && z.id === "gala") runDonorGala();
       else if (a) talkNpc(a);
       else toast(z.name);
-      if (z.id === "pitch" && !voters.includes("donors") && coins >= 10) tryRecruit("donors", Math.random() < 0.4);
+      if (z.id === "pitch") {
+        if (coins >= 15) {
+          coins -= 5;
+          floatText(player.x, player.y - 20, "-5¢ pitch fee", "#ff8080");
+          bumpFavor("donors", 1);
+          toast("Pitch fee paid. Donors pretend to listen.");
+        } else {
+          toast("Pitch Pavilion: need 15¢ liquid to look serious.");
+          sfx("warn");
+        }
+      }
       return;
     }
 
@@ -1776,11 +1839,8 @@
       banner("TOOL +1", "#80d0ff", 1.5);
       toast("Pocket Multitool +1! Tunnel access & errand swagger.");
       pushLog("Purchased tool upgrade.");
-      if (voters.includes("budget") && !voters.includes("budget")) {
-        /* no-op */
-      }
-      // Budget Watchers like thrift
-      if (Math.random() < 0.45) tryRecruit("budget", selected.id === "mayor" || selected.id === "bernie");
+      // Budget Watchers like thrift — still only a favor ping
+      bumpFavor("budget", 1);
       saveGame();
       return;
     }
@@ -1836,6 +1896,9 @@
       banner("RALLY CRY", selected.color, 1.5);
       toast("Rally Cry! Nearby hearts open a little.");
       addAxes({ street: 1 + powerRank });
+      // Must rally near stage for student favor
+      const st = getZone("stage");
+      if (st && inZone(player.x, player.y, st, 70)) bumpFavor("students", 1);
       return;
     }
 
@@ -1886,8 +1949,8 @@
       burst(player.x, player.y, "#c45c4a", 18);
       banner("REDISTRIBUTION", "#c45c4a", 2);
       toast(`Redistribution! Town buff ${Math.floor(redistribT)}s — Street up, Heat down.`);
-      if (!voters.includes("union") && Math.random() < 0.4 + powerRank * 0.1) tryRecruit("union", true);
-      if (!voters.includes("budget") && Math.random() < 0.3) tryRecruit("budget");
+      bumpFavor("union", 1);
+      bumpFavor("budget", 1);
       return;
     }
 
@@ -1908,7 +1971,8 @@
         toast("Rough landing. Cameras love a crash.");
       }
       addAxes({ donor: 1 });
-      if (!voters.includes("crypto") && Math.random() < 0.35) tryRecruit("crypto");
+      // Spectacle only warms crypto; still need VEND spends
+      bumpFavor("crypto", 1);
       return;
     }
 
@@ -1923,9 +1987,9 @@
       burst(player.x, player.y, "#e8c040", 20);
       banner("PIVOT", "#e8c040", 1.5);
       toast("Pivot! Donors swoon; Heat ticks up.");
-      if (!voters.includes("donors") && Math.random() < 0.4) tryRecruit("donors");
-      if (!voters.includes("patriots") && Math.random() < 0.3) tryRecruit("patriots", selected.id === "donny");
-      if (!voters.includes("chaos") && Math.random() < 0.25) tryRecruit("chaos");
+      bumpFavor("donors", 1);
+      bumpFavor("patriots", 1);
+      bumpFavor("chaos", 1);
       return;
     }
   }
@@ -1953,14 +2017,16 @@
       balloon(player.x, player.y - 44, "Debate win!", 2.5);
       toast("Plaza Debate: You land the line. The crowd actually listens.");
       pushLog("Won the Plaza Debate. Press Heat and Street Cred rise (rep).");
-      if (!voters.includes("students")) tryRecruit("students", selected.id === "alex");
-      if (!voters.includes("moderates") && Math.random() < 0.5) tryRecruit("moderates");
+      // Debate is the student errand climax
+      bumpFavor("students", 2, { autoJoin: true });
+      bumpFavor("moderates", 1);
     } else {
       addRep(2);
       addCoins(3);
       balloon(player.x, player.y - 44, "Messy debate", 2.5);
       toast("Plaza Debate: You fumble a metaphor. Still, you showed up.");
       pushLog("Debate was messy. A few polite claps.");
+      bumpFavor("students", 1);
     }
     saveGame();
   }
@@ -2942,19 +3008,31 @@
       ctx.font = "11px Segoe UI,sans-serif";
       ctx.fillText(`${Object.keys(codexSeen).length}/12 known · scandals ${scandals.length}`, cx + 12, cy + 40);
       VOTER_GROUPS.forEach((g, i) => {
-        const known = !!codexSeen[g.id] || voters.includes(g.id);
+        const known = !!codexSeen[g.id] || voters.includes(g.id) || favorOf(g.id) > 0;
         const y = cy + 58 + i * 26;
         ctx.fillStyle = known ? g.color : "#555";
         ctx.font = "12px Segoe UI,sans-serif";
-        fitText(known ? `${g.icon} ${g.name}` : "??? · ???", cx + 12, y, 200, "left");
-        if (known && voters.includes(g.id)) {
+        fitText(known ? `${g.icon} ${g.name}` : "??? · ???", cx + 12, y, 170, "left");
+        if (voters.includes(g.id)) {
           ctx.fillStyle = "#8d8";
           ctx.fillText("IN", cx + 250, y);
+        } else if (known) {
+          const need = favorNeedOf(g);
+          const fav = favorOf(g.id);
+          ctx.fillStyle = fav >= need ? "#ffd080" : "#a090b8";
+          ctx.font = "11px Cascadia Mono,monospace";
+          ctx.fillText(`${fav}/${need}`, cx + 230, y);
         }
       });
       ctx.fillStyle = "#8878a8";
       ctx.font = "10px sans-serif";
-      fitText("Scandals: " + (scandals.length ? scandals.slice(-3).join(" · ") : "none yet"), cx + 12, cy + ch - 16, cw - 24, "left");
+      fitText(
+        "Favor = errands done. IN = joined. " + (scandals.length ? scandals.slice(-2).join(" · ") : "No scandals yet"),
+        cx + 12,
+        cy + ch - 16,
+        cw - 24,
+        "left"
+      );
     }
 
     // toast — word-wrapped; larger on touch screens where the canvas shrinks
@@ -3264,6 +3342,8 @@
       "Save slots 1–3 on title (keys 1/2/3 when Continue focused).",
       "Daily recruit goals reset each morning (new joins only).",
       "If few blocs remain, the daily target shrinks automatically.",
+      "Blocs need FAVOR from annoying errands — chat alone won't convert them.",
+      "Failed pitches after favor can cost a favor point. Grind again.",
     ];
     lines.forEach((line, i) => {
       ctx.fillText("· " + line, W / 2 - 270, 120 + i * 26);
@@ -4284,7 +4364,14 @@
       objDone,
       allMainDone,
       forceRecruit(id) {
+        // QA: full-fill favor then force join
+        const g = VOTER_GROUPS.find((v) => v.id === id);
+        if (g) voterFavor[id] = favorNeedOf(g);
         return tryRecruit(id, true);
+      },
+      bumpFavor,
+      getFavor(id) {
+        return favorOf(id);
       },
       setDay(n) {
         dayIndex = clamp(n, 1, MAX_DAYS);
