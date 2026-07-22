@@ -11,7 +11,7 @@ Use this when wiring **Steam**, **Google Play Games**, or **Apple Game Center**.
 
 In-game: **G** opens boards · **Tab** switches Achievements ↔ Milestones.
 
-## Character unlock path (milestones)
+## Character unlock path (milestones) — main roster
 
 | Character | Milestone | Requirement |
 |-----------|-----------|-------------|
@@ -21,7 +21,18 @@ In-game: **G** opens boards · **Tab** switches Achievements ↔ Milestones.
 | Bernie Beans | Half the Town | 6 voters in one week |
 | Leon Rocket | Full Roll Call | 12 voters in one week |
 | Buck Bootstraps | Money Machine Season | Clear week with **Money** |
-| (all) | Seasoned Operator | Clear 3 weeks |
+| (all main) | Seasoned Operator | Clear 3 weeks |
+
+## Secret cast (easter eggs — not shown until unlocked)
+
+| Character | Easter egg |
+|-----------|------------|
+| **Pip the Civic** | Peck plaza **pigeons ×3** in a week |
+| **Mae Memo** | Read **Town Board 10×** (account total) |
+| **Canapé Carl** | Complete **Donor Gala** once |
+| **Cardboard Casey** | **Booth photo op ×3** (account total) |
+
+Secrets never appear as locked cards — they materialize on the select grid only after the egg.
 
 ## Steam / store achievement IDs
 

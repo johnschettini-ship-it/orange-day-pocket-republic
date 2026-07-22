@@ -37,7 +37,7 @@
   function regAsset(key, url) {
     ASSET_URLS[key] = url;
   }
-  ["tiny", "alex", "mayor", "bernie", "leon", "donny"].forEach((id) => {
+  ["tiny", "alex", "mayor", "bernie", "leon", "donny", "pip", "mae", "canape", "casey"].forEach((id) => {
     regAsset(`player/${id}_idle`, `assets/player/${id}_idle.png`);
     regAsset(`player/${id}_walk_0`, `assets/player/${id}_walk_0.png`);
     regAsset(`player/${id}_walk_1`, `assets/player/${id}_walk_1.png`);
@@ -153,7 +153,21 @@
     unlockedChars: { tiny: true },
     charsPlayed: {},
     weeksNoSteal: 0,
+    easter: { pigeon: false, boardReads: 0, gala: false, photos: 0 },
   };
+
+  function mainRoster() {
+    return CHARACTERS.filter((c) => !c.secret);
+  }
+  function secretRoster() {
+    return CHARACTERS.filter((c) => c.secret);
+  }
+  /** Select grid: main cast always (locked or not) + secrets only if unlocked */
+  function selectRoster() {
+    const main = mainRoster();
+    const secrets = secretRoster().filter((c) => isCharUnlocked(c.id));
+    return main.concat(secrets);
+  }
   let tipQueue = [];
   let tipT = 0;
 
@@ -1523,6 +1537,7 @@
     pushLog("Pigeon conspiracy (3 pecks) — favor toward Conspiracy.");
     burst(cl.x, cl.y, "#c0c0d0", 10);
     sfx("ok");
+    noteEaster("pigeon", true); // secret: Pip the Civic
   }
 
   function talkNpc(n) {
@@ -1714,6 +1729,7 @@
         toast("Photo op! +2¢, +1 Heat. The intern tags you unironically.");
         pushLog("Booth photo op — Heat +1, coins +2.");
         bumpFavor("chaos", 1);
+        noteEaster("photos", 1); // secret: Cardboard Casey at 3
         // Bootstraps toy: clarify prior statement at booth
         if (selected && selected.id === "donny") {
           bumpFavor("donors", 1);
@@ -1884,6 +1900,7 @@
       bumpFavor("donors", 1);
     }
     pushLog("Donor Gala night logged.");
+    noteEaster("gala", true); // secret: Canapé Carl
     saveGame();
   }
 
@@ -1956,6 +1973,7 @@
       }
       // Budget Watchers respect people who read the board (annoying, intentional)
       bumpFavor("budget", 1);
+      noteEaster("boardReads", 1); // secret: Mae Memo at 10
       return;
     }
 
@@ -2434,6 +2452,61 @@
       bumpFavor("donors", 1);
       bumpFavor("patriots", 1);
       bumpFavor("chaos", 1);
+      return;
+    }
+
+    // Secret cast powers (easter-egg characters)
+    if (pk === "scatter") {
+      launchT = 3 + powerRank;
+      const ang = Math.random() * Math.PI * 2;
+      player.x = clamp(player.x + Math.cos(ang) * 50, 24, MAP_W - 24);
+      player.y = clamp(player.y + Math.sin(ang) * 40, 24, MAP_H - 24);
+      burst(player.x, player.y, "#c0c0d0", 18);
+      banner("SCATTER", "#b8b8c8", 1.2);
+      toast("Feathers everywhere! Speed burst + conspiracy coo.");
+      bumpFavor("conspiracy", 1);
+      return;
+    }
+    if (pk === "postit") {
+      boardTipId = pickBoardTipId();
+      addAxes({ street: 1 });
+      banner("POST-IT", "#e8d060", 1.3);
+      toast(boardTipId ? "Memo refreshed. Check the Board sticky." : "Memo: coalition already full. Nice problem.");
+      bumpFavor("budget", 1);
+      bumpFavor("policy", 1);
+      sfx("ok");
+      return;
+    }
+    if (pk === "tray") {
+      if (brandT > 0) {
+        toast("Tray still circulating…");
+        return;
+      }
+      brandT = 5 + powerRank;
+      addCoins(5 + powerRank * 2);
+      addAxes({ donor: 2, heat: 2, street: -1 });
+      burst(player.x, player.y, "#e8a0c0", 16);
+      banner("PASSED TRAY", "#e8a0c0", 1.4);
+      toast("Canapés deployed. Donors nibble; Heat rises.");
+      bumpFavor("donors", 1);
+      return;
+    }
+    if (pk === "flat") {
+      if (rallyT > 0) {
+        toast("Still posing…");
+        return;
+      }
+      rallyT = 4 + powerRank * 2;
+      burst(player.x, player.y, "#c8a878", 14);
+      banner("FLAT RALLY", "#c8a878", 1.3);
+      toast("Cardboard face-forward! Nearby hearts confuse you for policy.");
+      addAxes({ street: 1, heat: 1 });
+      const st = getZone("stage");
+      const bo = getZone("booth");
+      if ((st && inZone(player.x, player.y, st, 80)) || (bo && inZone(player.x, player.y, bo, 80))) {
+        bumpFavor("chaos", 1);
+        bumpFavor("students", 1);
+      }
       return;
     }
   }
@@ -3879,24 +3952,26 @@
         W / 2 - 330,
         120
       );
-      MILESTONES.forEach((ms, i) => {
+      const visibleMs = MILESTONES.filter((ms) => !ms.secret || meta.milestones[ms.id] || (ms.unlocks || []).some((id) => meta.unlockedChars[id]));
+      visibleMs.forEach((ms, i) => {
         const on = !!meta.milestones[ms.id] || !!ms.auto;
-        const y = 148 + i * 42;
-        ctx.fillStyle = on ? "rgba(40,80,55,0.5)" : "rgba(40,30,50,0.55)";
-        drawRounded(W / 2 - 330, y - 16, 660, 38, 8);
+        const y = 148 + i * 36;
+        if (y > 470) return;
+        ctx.fillStyle = on ? "rgba(40,80,55,0.5)" : ms.secret ? "rgba(60,40,80,0.55)" : "rgba(40,30,50,0.55)";
+        drawRounded(W / 2 - 330, y - 14, 660, 32, 8);
         ctx.fill();
         ctx.fillStyle = on ? "#80e0a0" : "#8878a8";
-        ctx.font = font(14, "bold");
-        ctx.fillText((on ? "✓ " : "○ ") + ms.name, W / 2 - 318, y + 2);
+        ctx.font = font(13, "bold");
+        ctx.fillText((on ? "✓ " : "○ ") + (ms.secret ? "✦ " : "") + ms.name, W / 2 - 318, y + 2);
         ctx.fillStyle = on ? "#c8d8c8" : "#666";
-        ctx.font = font(11);
+        ctx.font = font(10);
         const unlockNames = (ms.unlocks || [])
           .map((id) => {
             const c = CHARACTERS.find((x) => x.id === id);
             return c ? c.short : id;
           })
           .join(", ");
-        fitText(ms.desc + (unlockNames ? "  →  " + unlockNames : ""), W / 2 - 318, y + 18, 640, "left");
+        fitText(ms.desc + (unlockNames ? "  →  " + unlockNames : ""), W / 2 - 318, y + 16, 640, "left");
       });
       ctx.textAlign = "center";
       ctx.fillStyle = "#8878a8";
@@ -4199,8 +4274,15 @@
     ctx.fillText("Choose your civic avatar", W / 2, 40);
     ctx.fillStyle = "#a090b8";
     ctx.font = "12px Segoe UI,sans-serif";
-    const nUn = Object.keys(meta.unlockedChars || {}).filter((k) => meta.unlockedChars[k]).length;
-    ctx.fillText(`← → · Enter · ${nUn}/6 unlocked · G milestones`, W / 2, 62);
+    const roster = selectRoster();
+    if (charIdx >= roster.length) charIdx = 0;
+    const nMain = mainRoster().filter((c) => isCharUnlocked(c.id)).length;
+    const nSec = secretRoster().filter((c) => isCharUnlocked(c.id)).length;
+    ctx.fillText(
+      `← → · Enter · main ${nMain}/6` + (nSec ? ` · secrets ${nSec}/4` : "") + ` · G milestones`,
+      W / 2,
+      62
+    );
 
     const cols = 3;
     const cardW = 280;
@@ -4210,24 +4292,28 @@
     const startX = (W - totalW) / 2;
     const y0 = 70;
 
-    CHARACTERS.forEach((c, i) => {
+    roster.forEach((c, i) => {
       const col = i % cols;
       const row = Math.floor(i / cols);
       const x = startX + col * (cardW + gap);
       const y = y0 + row * (cardH + gap);
       const sel = i === charIdx;
       const unlocked = isCharUnlocked(c.id);
+      // secrets only appear when unlocked — treat as always unlocked here
+      const showUnlocked = unlocked || !!c.secret;
       const pad = 12;
       const innerW = cardW - pad * 2;
 
-      ctx.fillStyle = !unlocked
+      ctx.fillStyle = !showUnlocked
         ? "rgba(20,16,30,0.92)"
         : sel
-          ? "rgba(255,140,40,0.2)"
+          ? c.secret
+            ? "rgba(180,120,255,0.18)"
+            : "rgba(255,140,40,0.2)"
           : "rgba(40,30,60,0.92)";
       drawRounded(x, y, cardW, cardH, 12);
       ctx.fill();
-      ctx.strokeStyle = sel ? "#ff9a3c" : unlocked ? "#4a3a68" : "#333048";
+      ctx.strokeStyle = sel ? (c.secret ? "#c080ff" : "#ff9a3c") : showUnlocked ? "#4a3a68" : "#333048";
       ctx.lineWidth = sel ? 3 : 1;
       ctx.stroke();
 
@@ -4236,7 +4322,7 @@
       ctx.clip();
 
       const ab = Math.sin(animT * 3 + i) * 2;
-      if (unlocked) {
+      if (showUnlocked) {
         if (
           !drawSprite(`player/${c.id}_down_idle`, x + 12, y + 24 + ab, 56, 70) &&
           !drawSprite(`player/${c.id}_idle`, x + 12, y + 24 + ab, 56, 70)
@@ -4258,10 +4344,10 @@
       }
 
       ctx.textAlign = "left";
-      ctx.fillStyle = unlocked ? "#fff" : "#777";
+      ctx.fillStyle = showUnlocked ? "#fff" : "#777";
       ctx.font = "bold 14px Segoe UI,sans-serif";
-      fitText(unlocked ? c.name : "???", x + 80, y + 42, innerW - 70, "left");
-      if (unlocked) {
+      fitText(showUnlocked ? c.name + (c.secret ? " ✦" : "") : "???", x + 80, y + 42, innerW - 70, "left");
+      if (showUnlocked) {
         ctx.fillStyle = c.accent;
         ctx.font = "bold 11px Segoe UI,sans-serif";
         fitText(c.power, x + 80, y + 60, innerW - 70, "left");
@@ -4283,12 +4369,12 @@
     ctx.fillStyle = "#8878a8";
     ctx.font = "12px Segoe UI,sans-serif";
     ctx.textAlign = "center";
-    const cur = CHARACTERS[charIdx];
-    if (cur && !isCharUnlocked(cur.id)) {
+    const cur = roster[charIdx];
+    if (cur && !isCharUnlocked(cur.id) && !cur.secret) {
       ctx.fillStyle = "#e0a080";
       ctx.fillText(charUnlockHint(cur.id) + " · G for milestone board", W / 2, H - 18);
     } else {
-      ctx.fillText("Enter to start · locked cast needs milestones (G)", W / 2, H - 18);
+      ctx.fillText("Enter to start · secrets appear only after easter eggs", W / 2, H - 18);
     }
   }
 
@@ -4664,9 +4750,11 @@
         }
         e.preventDefault();
       } else if (state === "select") {
-        const pick = CHARACTERS[charIdx];
-        if (!isCharUnlocked(pick.id)) {
-          toast(charUnlockHint(pick.id));
+        const roster = selectRoster();
+        if (charIdx >= roster.length) charIdx = 0;
+        const pick = roster[charIdx];
+        if (!pick || !isCharUnlocked(pick.id)) {
+          toast(pick ? charUnlockHint(pick.id) : "Pick a citizen.");
           sfx("warn");
           e.preventDefault();
         } else {
@@ -4688,8 +4776,10 @@
       }
     }
     if (state === "select") {
-      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") charIdx = (charIdx + CHARACTERS.length - 1) % CHARACTERS.length;
-      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") charIdx = (charIdx + 1) % CHARACTERS.length;
+      const roster = selectRoster();
+      const n = Math.max(1, roster.length);
+      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") charIdx = (charIdx + n - 1) % n;
+      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") charIdx = (charIdx + 1) % n;
     }
     if (state === "play") {
       if (e.key === "e" || e.key === "E") interact();
@@ -4814,6 +4904,7 @@
       return true;
     }
     if (state === "select") {
+      const roster = selectRoster();
       const cols = 3,
         cardW = 280,
         cardH = 200,
@@ -4821,7 +4912,7 @@
         y0 = 70;
       const totalW = cols * cardW + (cols - 1) * gap;
       const startX = (W - totalW) / 2;
-      CHARACTERS.forEach((c, i) => {
+      roster.forEach((c, i) => {
         const col = i % cols;
         const row = Math.floor(i / cols);
         const x = startX + col * (cardW + gap);
@@ -4838,7 +4929,6 @@
           }
         }
       });
-      // Gallery tab hits when board open
       return true;
     }
     if (state === "evening") {
@@ -5053,6 +5143,13 @@
         const times = (meta.coalitionsWon && meta.coalitionsWon[n.coalition]) || 0;
         if (times < 1) ok = false;
       }
+      if (n.easter) {
+        meta.easter = meta.easter || {};
+        if (n.easter.pigeon && !meta.easter.pigeon) ok = false;
+        if (n.easter.gala && !meta.easter.gala) ok = false;
+        if (n.easter.boardReads != null && (meta.easter.boardReads || 0) < n.easter.boardReads) ok = false;
+        if (n.easter.photos != null && (meta.easter.photos || 0) < n.easter.photos) ok = false;
+      }
       if (!ok) return;
       meta.milestones[ms.id] = true;
       (ms.unlocks || []).forEach((cid) => {
@@ -5069,19 +5166,35 @@
       }
     });
     // Public achievements tied to progression
-    const unlockedCount = Object.keys(meta.unlockedChars || {}).filter((k) => meta.unlockedChars[k]).length;
-    if (unlockedCount >= 2) unlockAchieve("first_milestone", "Cast Call");
-    if (unlockedCount >= 6) unlockAchieve("full_cast", "Full Cast");
+    const mainUnlocked = mainRoster().filter((c) => meta.unlockedChars[c.id]).length;
+    const secretUnlocked = secretRoster().filter((c) => meta.unlockedChars[c.id]).length;
+    if (mainUnlocked >= 2) unlockAchieve("first_milestone", "Cast Call");
+    if (mainUnlocked >= 6) unlockAchieve("full_cast", "Full Cast");
+    if (secretUnlocked >= 1) unlockAchieve("secret_one", "Hidden Citizen");
+    if (secretUnlocked >= 4) unlockAchieve("secret_all", "Deep Cut Cast");
     if ((meta.weeksCleared || 0) >= 3) unlockAchieve("three_weeks", "Three Seasons");
     saveMeta();
     if (announce && newly.length) {
       newly.forEach((n) => {
         const c = CHARACTERS.find((x) => x.id === n.char);
-        toast("Unlocked: " + (c ? c.name : n.char) + "!");
+        const secret = c && c.secret;
+        toast((secret ? "Secret unlock: " : "Unlocked: ") + (c ? c.name : n.char) + "!");
       });
       sfx("sting");
     }
     return newly;
+  }
+
+  /** Flag an easter progress bit/counter then re-check secret milestones. */
+  function noteEaster(key, value) {
+    meta.easter = meta.easter || { pigeon: false, boardReads: 0, gala: false, photos: 0 };
+    if (key === "boardReads" || key === "photos") {
+      meta.easter[key] = (meta.easter[key] || 0) + (typeof value === "number" ? value : 1);
+    } else {
+      meta.easter[key] = value === undefined ? true : value;
+    }
+    saveMeta();
+    evaluateMilestones(true);
   }
 
   /** Call at Election Night — advances account meta without rewriting run balance. */
