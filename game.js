@@ -3575,7 +3575,7 @@
       }
     }
 
-    // title wordmark over lower key art
+    // Title: wordmark + CTA only. Genre jargon / control dumps live in Options & Credits.
     ctx.fillStyle = "rgba(20,12,30,0.55)";
     drawRounded(W / 2 - 200, 300, 400, 70, 12);
     ctx.fill();
@@ -3587,73 +3587,55 @@
     ctx.font = "700 22px Segoe UI,sans-serif";
     ctx.fillText("Pocket Republic", W / 2, 360);
 
-    ctx.fillStyle = "#c8b8d8";
-    ctx.font = "13px Segoe UI,sans-serif";
-    ctx.fillText("Cozy satirical civic life-sim · " + BUILD_ID, W / 2, 400);
-    ctx.fillStyle = "#9080a8";
-    ctx.font = "11px Cascadia Mono,monospace";
-    ctx.fillText("Fictional parody archetypes · No real names or likenesses", W / 2, 420);
-
     const has = hasSave(1) || hasSave(2) || hasSave(3) || hasSave();
-    // draft badge
-    ctx.fillStyle = "rgba(255,180,80,0.2)";
-    drawRounded(W / 2 - 120, 8, 240, 22, 8);
+    // Quiet build chip — not a marketing blurb
+    ctx.fillStyle = "rgba(20,12,30,0.45)";
+    drawRounded(W / 2 - 48, 10, 96, 20, 8);
     ctx.fill();
-    ctx.fillStyle = "#ffd080";
-    ctx.font = "bold 11px Segoe UI,sans-serif";
+    ctx.fillStyle = "#a090b8";
+    ctx.font = "bold 10px Cascadia Mono,monospace";
     ctx.textAlign = "center";
-    ctx.fillText(DRAFT_LABEL + " · " + BUILD_ID, W / 2, 23);
+    ctx.fillText(BUILD_ID, W / 2, 24);
 
     if (has) {
       const contOn = titleFocus === "continue";
       ctx.fillStyle = contOn ? `rgba(255,140,40,${0.9 + Math.sin(animT * 4) * 0.1})` : "rgba(80,60,100,0.85)";
-      drawRounded(W / 2 - 270, 430, 250, 44, 12);
+      drawRounded(W / 2 - 270, 420, 250, 48, 12);
       ctx.fill();
       ctx.fillStyle = contOn ? "#1a0f20" : "#ddd";
-      ctx.font = "bold 15px Segoe UI,sans-serif";
-      ctx.fillText("Continue (C) slot " + saveSlot, W / 2 - 145, 458);
+      ctx.font = "bold 16px Segoe UI,sans-serif";
+      ctx.fillText("Continue · slot " + saveSlot, W / 2 - 145, 450);
 
       ctx.fillStyle = !contOn ? `rgba(255,140,40,${0.9 + Math.sin(animT * 4) * 0.1})` : "rgba(80,60,100,0.85)";
-      drawRounded(W / 2 + 20, 430, 250, 44, 12);
+      drawRounded(W / 2 + 20, 420, 250, 48, 12);
       ctx.fill();
       ctx.fillStyle = !contOn ? "#1a0f20" : "#ddd";
-      ctx.fillText("New Week (N)", W / 2 + 145, 458);
+      ctx.fillText("New Game", W / 2 + 145, 450);
 
-      // slots — filled vs empty readable at a glance
       for (let s = 1; s <= 3; s++) {
         const on = saveSlot === s;
         const filled = hasSave(s);
         ctx.fillStyle = on ? "#ff9a3c" : filled ? "rgba(70,150,110,0.9)" : "rgba(45,38,65,0.9)";
-        drawRounded(W / 2 - 100 + (s - 1) * 70, 482, 60, 26, 6);
+        drawRounded(W / 2 - 100 + (s - 1) * 70, 485, 60, 26, 6);
         ctx.fill();
         if (on) {
           ctx.strokeStyle = "#fff0c0";
           ctx.lineWidth = 2;
-          drawRounded(W / 2 - 100 + (s - 1) * 70, 482, 60, 26, 6);
+          drawRounded(W / 2 - 100 + (s - 1) * 70, 485, 60, 26, 6);
           ctx.stroke();
         }
         ctx.fillStyle = on ? "#1a1020" : filled ? "#e8ffe8" : "#8878a8";
         ctx.font = "bold 12px sans-serif";
-        ctx.fillText((filled ? "●" : "○") + " S" + s, W / 2 - 70 + (s - 1) * 70, 500);
+        ctx.fillText((filled ? "●" : "○") + " " + s, W / 2 - 70 + (s - 1) * 70, 503);
       }
-
-      ctx.fillStyle = "#9a8ab8";
-      ctx.font = "11px Segoe UI,sans-serif";
-      ctx.fillText("1/2/3 slots (●=save) · G gallery · H glossary · O options", W / 2, 528);
     } else {
       const pulse = 0.88 + Math.sin(animT * 4) * 0.12;
       ctx.fillStyle = `rgba(255,140,40,${pulse})`;
-      drawRounded(W / 2 - 130, 440, 260, 48, 12);
+      drawRounded(W / 2 - 140, 430, 280, 52, 12);
       ctx.fill();
       ctx.fillStyle = "#1a0f20";
       ctx.font = "bold 18px Segoe UI,sans-serif";
-      ctx.fillText("Press Enter / Click", W / 2, 470);
-      ctx.fillStyle = "#7a6a98";
-      ctx.font = "12px Segoe UI,sans-serif";
-      ctx.fillText("WASD · E · Q · O options · gamepad", W / 2, 508);
-      ctx.fillStyle = "#6a5a88";
-      ctx.font = "10px Cascadia Mono,monospace";
-      ctx.fillText(BUILD_ID, W / 2, 528);
+      ctx.fillText("Press Enter / Click", W / 2, 462);
     }
   }
 
