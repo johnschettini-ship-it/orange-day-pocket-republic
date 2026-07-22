@@ -51,7 +51,7 @@
       regAsset(`player/${id}_walk_${f}`, `assets/player/${id}_walk_${f}.png`);
     }
   });
-  ["clerk", "barista", "vendor", "mover", "stagehand", "boothie", "parkgoer", "watchdog"].forEach((id) => {
+  ["clerk", "barista", "vendor", "mover", "stagehand", "boothie", "parkgoer", "watchdog", "paver"].forEach((id) => {
     regAsset(`npc/${id}`, `assets/npc/${id}.png`);
   });
   ["crypto", "wine", "students", "union", "moderates", "chaos", "donors", "conspiracy", "budget", "patriots", "policy", "lawn"].forEach((id) => {
@@ -501,11 +501,14 @@
     seedFlags = { permitAtMail: true };
     const crisis = getCrisis();
     const rule = getBoardRule();
-    const morning = `Day ${dayIndex}/${MAX_DAYS}: ${crisis.title} · Rule: ${rule.title}`;
+    const unlockedToday = DISTRICTS.filter((d) => d.id !== "plaza" && d.unlockDay === dayIndex).map((d) => d.name);
+    let morning = `Day ${dayIndex}/${MAX_DAYS}: ${crisis.title} · Rule: ${rule.title}`;
+    if (unlockedToday.length) morning += ` · Opens: ${unlockedToday.join(", ")}`;
     msg = morning;
-    msgT = 4.5;
+    msgT = unlockedToday.length ? 5.5 : 4.5;
     if (isNewRun) log = [];
     pushLog(`Morning — Day ${dayIndex}. Crisis: ${crisis.title}. Rule: ${rule.title}.`);
+    if (unlockedToday.length) pushLog("District open: " + unlockedToday.join(", ") + ".");
     // Policy bloc permit ease: free small progress chance
     const coal = activeCoalition();
     if (coal && coal.id === "policy" && Math.random() < 0.4) {
@@ -587,13 +590,26 @@
     }
   }
 
+  function parseSaveRaw(raw) {
+    if (!raw) return null;
+    try {
+      const data = JSON.parse(raw);
+      return data && data.charId && data.dayIndex ? data : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
   function hasSave(slot) {
     try {
       if (typeof localStorage === "undefined") return false;
-      const raw = localStorage.getItem(slot != null ? slotKey(slot) : SAVE_KEY) || localStorage.getItem(SAVE_KEY);
-      if (!raw) return false;
-      const data = JSON.parse(raw);
-      return !!(data && data.charId && data.dayIndex);
+      // Explicit slot: that key only (no legacy fallback — empty slots stay empty).
+      if (slot != null) return !!parseSaveRaw(localStorage.getItem(slotKey(slot)));
+      // No arg: any slot 1–3, else legacy continue key.
+      for (let s = 1; s <= 3; s++) {
+        if (parseSaveRaw(localStorage.getItem(slotKey(s)))) return true;
+      }
+      return !!parseSaveRaw(localStorage.getItem(SAVE_KEY));
     } catch (_) {
       return false;
     }
@@ -603,7 +619,17 @@
     try {
       if (typeof localStorage === "undefined") return false;
       if (slot != null) saveSlot = slot;
-      const raw = localStorage.getItem(slotKey(saveSlot)) || localStorage.getItem(SAVE_KEY);
+      let raw = localStorage.getItem(slotKey(saveSlot));
+      // Migrate legacy once into the active slot if that slot is empty.
+      if (!raw) {
+        const legacy = localStorage.getItem(SAVE_KEY);
+        if (legacy && parseSaveRaw(legacy)) {
+          raw = legacy;
+          try {
+            localStorage.setItem(slotKey(saveSlot), legacy);
+          } catch (_) {}
+        }
+      }
       if (!raw) return false;
       const data = JSON.parse(raw);
       const char = CHARACTERS.find((c) => c.id === data.charId);
@@ -2707,22 +2733,20 @@
     ctx.fillStyle = dist ? dist.color : "#aaa";
     fitText(dist ? dist.name : "Plaza", 52, 46, 120, "left");
 
-    // stats — right-aligned against the day chip so it never collides with
-    // the axes column to its left, regardless of digit count (coins is
-    // uncapped; axes are clamped 0-100 so their column width is bounded).
-    ctx.textAlign = "right";
-    ctx.font = "bold 14px Cascadia Mono,monospace";
-    ctx.fillStyle = "#ffd060";
-    ctx.fillText(`${coins}¢`, 262, 24);
-    // axes (Phase B)
+    // stats: axes column (bounded 0–100) then coins right-aligned into the
+    // day chip so large coin counts never paint over St/Do/Ht labels.
     ctx.font = "bold 10px Cascadia Mono,monospace";
     ctx.textAlign = "left";
     ctx.fillStyle = "#80e0a0";
-    ctx.fillText(`St ${axes.street | 0}`, 188, 18);
+    ctx.fillText(`St ${axes.street | 0}`, 175, 18);
     ctx.fillStyle = "#80c0e0";
-    ctx.fillText(`Do ${axes.donor | 0}`, 188, 30);
+    ctx.fillText(`Do ${axes.donor | 0}`, 175, 30);
     ctx.fillStyle = "#e080a0";
-    ctx.fillText(`Ht ${axes.heat | 0}`, 188, 42);
+    ctx.fillText(`Ht ${axes.heat | 0}`, 175, 42);
+    ctx.textAlign = "right";
+    ctx.font = "bold 14px Cascadia Mono,monospace";
+    ctx.fillStyle = "#ffd060";
+    ctx.fillText(`${coins}¢`, 258, 24);
 
     // day index chip
     ctx.fillStyle = "rgba(255,160,60,0.25)";

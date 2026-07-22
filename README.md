@@ -114,12 +114,21 @@ Regenerate sprites with `python tools/gen_sprites.py` if needed.
 ### Play notes (v1.3)
 
 - **7-day election week** → Election Night results  
-- **4 districts** with day gates (Media D2 · Campus D3 · Donors D4)  
+- **4 districts** with day gates (Media D2 · Campus D3 · Donors D4) — Campus is **Day 3**, not Day 2  
+- **Rotating daily objectives** (Day 1 plaza errands → later setpiece days → Election Eve)  
 - **Setpieces:** Debate · Scandal Leak · Union March · Donor Gala  
+- **Civic grift gags:** Paver Pete (potholes never fixed) · Board of Ed lunch · Ad Desk (fake “$X.99 REAL MONEY” satire — no real purchases)  
 - **Save slots 1–3** on title · Continue per slot  
 - **G** gallery · **H** glossary · day-1 tutorial tips  
 - **O** options · **L** day length · soft NG+ banked start coins  
-- Mid-day micro-events · endings including E6–E9  
+- Touch dock + high-DPI canvas · mid-day micro-events · endings E6–E9  
+
+### QA
+
+```bash
+node smoke.js
+node tools/playtest_auto.js
+```
 
 ## Agents (AI / multi-session)
 
