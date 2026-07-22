@@ -897,12 +897,57 @@
     if (n >= 0) addAxes({ street: n, donor: Math.floor(n * 0.25) });
     else addAxes({ street: n, heat: Math.ceil(-n * 0.5) });
   }
+  function remainingVoterCount() {
+    return VOTER_GROUPS.filter((v) => !voters.includes(v.id)).length;
+  }
+
+  /**
+   * Daily objectives with adaptive voter targets.
+   * "Recruit N more" = N *new* recruits *today* (objProg resets each morning).
+   * Total coalition size does NOT carry into the daily progress bar.
+   * If you front-loaded the roster, target shrinks to remaining uncommitted
+   * blocs (or auto-clears when none are left) so Day 3+ isn't a scavenger hunt.
+   */
   function currentObjectives() {
-    return DAILY_OBJECTIVES[dayIndex] || DAILY_OBJECTIVES[1];
+    const base = DAILY_OBJECTIVES[dayIndex] || DAILY_OBJECTIVES[1];
+    const left = remainingVoterCount();
+    return base.map((o) => {
+      if (o.id !== "voters") return { ...o };
+      const want = o.target | 0;
+      const target = Math.min(want, left);
+      if (target <= 0) {
+        return {
+          id: "voters",
+          label: "Coalition full — all blocs courted (hold the line)",
+          short: "Coalition full",
+          target: 0,
+          adaptive: true,
+        };
+      }
+      if (target < want) {
+        return {
+          id: "voters",
+          label: `Recruit the last ${target} uncommitted bloc${target === 1 ? "" : "s"}`,
+          short: `Last ${target} voter${target === 1 ? "" : "s"}`,
+          target,
+          adaptive: true,
+        };
+      }
+      // Clarify "new today" so evening report isn't read as total count
+      return {
+        ...o,
+        label: (o.label || "").replace("more voter groups", "new voter groups today").replace("more voter group", "new voter group today"),
+        short: (o.short || "").replace("voters", "new today").replace("voter", "new today"),
+      };
+    });
   }
   function setObj(id, v) {
     const o = currentObjectives().find((x) => x.id === id);
     if (!o) return;
+    if (o.target === 0) {
+      objProg[id] = 0;
+      return;
+    }
     objProg[id] = Math.min(o.target, v);
   }
   function bumpObj(id, d = 1) {
@@ -910,7 +955,9 @@
   }
   function objDone(id) {
     const o = currentObjectives().find((x) => x.id === id);
-    return o && (objProg[id] || 0) >= o.target;
+    if (!o) return false;
+    if (o.target === 0) return true; // coalition already full
+    return (objProg[id] || 0) >= o.target;
   }
   function allMainDone() {
     return currentObjectives()
@@ -1921,6 +1968,8 @@
   function endDay(voluntary) {
     if (dayEnded) return;
     dayEnded = true;
+    floaters = [];
+    balloons = [];
     stopMusic();
     sfx("sleep");
     let homeOk = false;
@@ -2826,15 +2875,35 @@
       ctx.fillText(`Day ${dayIndex} Objectives  (Tab)`, ox + 12, oy + 18);
       objs.forEach((o, i) => {
         const done = objDone(o.id);
-        const p = objProg[o.id] || 0;
+        const p = o.target === 0 ? 0 : objProg[o.id] || 0;
         ctx.fillStyle = done ? "#6d6" : "#e8d8f0";
         ctx.font = "11px Segoe UI,sans-serif";
         const mark = done ? "✓" : "○";
         const label = o.short || o.label;
-        fitText(`${mark} ${label}  ${p}/${o.target}`, ox + 12, oy + 40 + i * 20, ow - 24, "left");
+        const prog = o.target === 0 ? "✓" : `${p}/${o.target}`;
+        fitText(`${mark} ${label}  ${prog}`, ox + 12, oy + 40 + i * 20, ow - 24, "left");
       });
+      // Uncommitted blocs — the "I can't find voters" fix
+      const leftN = remainingVoterCount();
+      const hintY = oy + 40 + objs.length * 20 + 4;
+      if (leftN > 0 && leftN <= 6) {
+        const miss = VOTER_GROUPS.filter((v) => !voters.includes(v.id)).slice(0, 2);
+        ctx.fillStyle = "#a8d0ff";
+        ctx.font = "10px Segoe UI,sans-serif";
+        fitText(
+          `Still open (${leftN}): ${miss.map((v) => v.name.split(" ")[0]).join(", ")}${leftN > 2 ? "…" : ""} · C codex`,
+          ox + 12,
+          hintY,
+          ow - 24,
+          "left"
+        );
+      } else if (leftN === 0) {
+        ctx.fillStyle = "#80e0a0";
+        ctx.font = "10px Segoe UI,sans-serif";
+        fitText("All 12 blocs courted — recruit obj auto-clears.", ox + 12, hintY, ow - 24, "left");
+      }
       // crisis + debate hint under objectives
-      const extraY = oy + 40 + objs.length * 20 + 8;
+      const extraY = hintY + 16;
       ctx.fillStyle = "#ffb070";
       ctx.font = "10px Segoe UI,sans-serif";
       fitText(`Crisis: ${getCrisis().title}`, ox + 12, extraY, ow - 24, "left");
@@ -3193,6 +3262,8 @@
       "Mayor Mandate / Leon Rocket are local/tech — not presidential.",
       "Soft NG+ — strong weeks bank start coins next New Week.",
       "Save slots 1–3 on title (keys 1/2/3 when Continue focused).",
+      "Daily recruit goals reset each morning (new joins only).",
+      "If few blocs remain, the daily target shrinks automatically.",
     ];
     lines.forEach((line, i) => {
       ctx.fillText("· " + line, W / 2 - 270, 120 + i * 26);
@@ -3308,8 +3379,11 @@
 
     if (e.debateDone) {
       ctx.fillStyle = e.debateWon ? "#8d8" : "#da8";
-      ctx.font = "13px Segoe UI,sans-serif";
-      ctx.fillText(e.debateWon ? "Plaza Debate: WIN" : "Plaza Debate: messy but present", 560, 400);
+      ctx.font = "12px Segoe UI,sans-serif";
+      ctx.textAlign = "left";
+      // Park under the voter list so it never paints over names
+      const debateY = 248 + Math.max(3, (e.voters || []).length) * 22 + 8;
+      ctx.fillText(e.debateWon ? "Plaza Debate: WIN" : "Plaza Debate: messy but present", 560, Math.min(debateY, 430));
     }
 
     const last = e.day >= MAX_DAYS;
@@ -4240,6 +4314,8 @@
         return dayLengthMode;
       },
       maybeMicroEvent,
+      currentObjectives,
+      remainingVoterCount,
       openPause() {
         if (state === "play") state = "pause";
         drawPause();

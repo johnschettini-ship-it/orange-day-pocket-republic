@@ -323,39 +323,40 @@ const POWER_RANK_COST = [0, 18, 36, 55]; // v1.0: reachable within a week
 // tutorial (README's stated "core loop"). Days 2-6 pair a lighter recruit
 // quota with that day's already-scheduled setpiece (debate/scandal/march/
 // gala) or district beat, so the panel always points at something the day
-// actually offers. Recruit targets are staggered 3+2+2+2+1+1+0 = 11 of the
-// 12 total voter blocs, so "recruit N voters" never asks for more fresh
-// blocs than can possibly remain.
+// actually offers. Baseline recruit targets are staggered 3+2+2+2+1+1+0.
+// IMPORTANT: daily "voters" progress RESETS each morning (new recruits only).
+// Runtime clamps target to remaining uncommitted blocs so overachievers
+// aren't sent on impossible scavenger hunts on Day 3+.
 const DAILY_OBJECTIVES = {
   1: [
     { id: "permit", label: "Deliver lost permit to Town Hall", short: "Deliver permit", target: 1 },
     { id: "buttons", label: "Collect 3 campaign buttons", short: "3 campaign buttons", target: 3 },
     { id: "coffee", label: "Fix the broken coffee cart", short: "Fix coffee cart", target: 1 },
-    { id: "voters", label: "Recruit 3 voter groups", short: "Recruit 3 voters", target: 3 },
+    { id: "voters", label: "Recruit 3 new voter groups today", short: "3 new voters today", target: 3 },
     { id: "home", label: "Return home before night", short: "Home before night", target: 1 },
   ],
   2: [
-    { id: "voters", label: "Recruit 2 more voter groups", short: "Recruit 2 voters", target: 2 },
+    { id: "voters", label: "Recruit 2 new voter groups today", short: "2 new voters today", target: 2 },
     { id: "debate", label: "Take the Plaza Debate (Civic Stage)", short: "Plaza Debate", target: 1 },
     { id: "home", label: "Return home before night", short: "Home before night", target: 1 },
   ],
   3: [
-    { id: "voters", label: "Recruit 2 more voter groups", short: "Recruit 2 voters", target: 2 },
+    { id: "voters", label: "Recruit 2 new voter groups today", short: "2 new voters today", target: 2 },
     { id: "scandal", label: "Check the Leak Desk (Media Alley)", short: "Leak Desk", target: 1 },
     { id: "home", label: "Return home before night", short: "Home before night", target: 1 },
   ],
   4: [
-    { id: "voters", label: "Recruit 2 more voter groups", short: "Recruit 2 voters", target: 2 },
+    { id: "voters", label: "Recruit 2 new voter groups today", short: "2 new voters today", target: 2 },
     { id: "march", label: "Join the Union March (Campus Green)", short: "Union March", target: 1 },
     { id: "home", label: "Return home before night", short: "Home before night", target: 1 },
   ],
   5: [
-    { id: "voters", label: "Recruit 1 more voter group", short: "Recruit 1 voter", target: 1 },
+    { id: "voters", label: "Recruit 1 new voter group today", short: "1 new voter today", target: 1 },
     { id: "gala", label: "Work the Donor Gala (Donor Heights)", short: "Donor Gala", target: 1 },
     { id: "home", label: "Return home before night", short: "Home before night", target: 1 },
   ],
   6: [
-    { id: "voters", label: "Recruit 1 more voter group", short: "Recruit 1 voter", target: 1 },
+    { id: "voters", label: "Recruit 1 new voter group today", short: "1 new voter today", target: 1 },
     { id: "media", label: "Ride out the Spin Storm (Media Alley)", short: "Spin Storm", target: 1 },
     { id: "home", label: "Return home before night", short: "Home before night", target: 1 },
   ],
