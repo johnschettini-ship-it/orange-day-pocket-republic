@@ -3854,6 +3854,10 @@
       if (e.key === "Escape") pauseAction("resume");
       else if (e.key === "s" || e.key === "S") pauseAction("save");
       else if (e.key === "r" || e.key === "R") pauseAction("restart");
+      else if (e.key === "o" || e.key === "O") pauseAction("options");
+      else if (e.key === "g" || e.key === "G") pauseAction("gallery");
+      else if (e.key === "h" || e.key === "H") pauseAction("glossary");
+      else if (e.key === "i" || e.key === "I") pauseAction("credits");
     }
   });
   window.addEventListener("keyup", (e) => {
@@ -3861,28 +3865,45 @@
     keys[e.key.toLowerCase()] = false;
   });
 
-  canvas.addEventListener("click", (e) => {
-    canvas.focus?.();
+  function canvasPoint(e) {
     const rect = canvas.getBoundingClientRect();
-    const sx = W / rect.width;
-    const sy = H / rect.height;
-    const mx = (e.clientX - rect.left) * sx;
-    const my = (e.clientY - rect.top) * sy;
+    const sx = W / Math.max(1, rect.width);
+    const sy = H / Math.max(1, rect.height);
+    const src = e.changedTouches && e.changedTouches[0] ? e.changedTouches[0] : e;
+    return {
+      mx: (src.clientX - rect.left) * sx,
+      my: (src.clientY - rect.top) * sy,
+    };
+  }
+
+  function hitPauseAt(mx, my) {
+    // Ensure button rects exist even if pause opened mid-frame before first draw
+    if (!pauseButtons.length && state === "pause") drawPause();
+    return pauseButtons.find((b) => mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h);
+  }
+
+  function handleCanvasPointer(e, fromTouch) {
+    canvas.focus?.();
+    const { mx, my } = canvasPoint(e);
 
     if (showOptions || showGallery || showGlossary || showCredits) {
       showOptions = showGallery = showGlossary = showCredits = false;
-      return;
+      if (fromTouch && e.cancelable) e.preventDefault();
+      return true;
     }
     if (state === "pause") {
-      const hit = pauseButtons.find((b) => mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h);
-      if (hit) pauseAction(hit.id);
-      return;
+      const hit = hitPauseAt(mx, my);
+      if (hit) {
+        pauseAction(hit.id);
+        if (fromTouch && e.cancelable) e.preventDefault();
+        return true;
+      }
+      return true; // swallow background taps while paused
     }
 
     if (state === "title") {
       ensureAudio();
       if (hasSave()) {
-        // click left = continue, right = new
         if (mx < W / 2) {
           titleFocus = "continue";
           if (!loadGame()) {
@@ -3897,7 +3918,7 @@
       } else {
         state = "select";
       }
-      return;
+      return true;
     }
     if (state === "select") {
       const cols = 3,
@@ -3919,18 +3940,33 @@
           toast(`You wake as ${selected.name}. Day ${dayIndex}/7 — check the Town Board.`);
         }
       });
-      return;
+      return true;
     }
     if (state === "evening") {
       finishEvening();
-      return;
+      return true;
     }
     if (state === "results") {
       state = "title";
       titleFocus = "new";
-      return;
+      return true;
     }
+    return false;
+  }
+
+  canvas.addEventListener("click", (e) => {
+    handleCanvasPointer(e, false);
   });
+  // Mobile: touchend is more reliable than synthetic click for in-canvas pause buttons
+  canvas.addEventListener(
+    "touchend",
+    (e) => {
+      if (state === "pause" || showOptions || showGallery || showGlossary || showCredits) {
+        handleCanvasPointer(e, true);
+      }
+    },
+    { passive: false }
+  );
 
   // Touch
   function setupTouch() {
@@ -4204,6 +4240,21 @@
         return dayLengthMode;
       },
       maybeMicroEvent,
+      openPause() {
+        if (state === "play") state = "pause";
+        drawPause();
+        return state;
+      },
+      get pauseButtons() {
+        return pauseButtons.map((b) => ({ ...b }));
+      },
+      hitPause(mx, my) {
+        if (state !== "pause") return null;
+        if (!pauseButtons.length) drawPause();
+        const hit = pauseButtons.find((b) => mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h);
+        return hit ? hit.id : null;
+      },
+      pauseAction,
       get draftLabel() {
         return DRAFT_LABEL;
       },
