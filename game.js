@@ -687,6 +687,36 @@
     }
   }
 
+  /** Preview meta for title save cards (null if empty). */
+  function getSaveMeta(slot) {
+    try {
+      if (typeof localStorage === "undefined") return null;
+      const data = parseSaveRaw(localStorage.getItem(slotKey(slot)));
+      if (!data) return null;
+      const char = CHARACTERS.find((c) => c.id === data.charId);
+      const distId = data.currentDistrict || "plaza";
+      const dist = DISTRICTS.find((d) => d.id === distId);
+      const nVoters = Array.isArray(data.voters) ? data.voters.length : 0;
+      return {
+        slot,
+        charId: data.charId,
+        charName: char ? char.name : data.charId || "Citizen",
+        charShort: char ? char.short : "?",
+        charColor: char ? char.color : "#ff8c28",
+        dayIndex: data.dayIndex | 0,
+        coins: data.coins | 0,
+        voters: nVoters,
+        district: dist ? dist.name : "Plaza",
+        midDay: !!data.midDay,
+        axes: data.axes || null,
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  let titleSaveCards = []; // hit targets for full save cards
+
   function loadGame(slot) {
     try {
       if (typeof localStorage === "undefined") return false;
@@ -3552,11 +3582,11 @@
     }
 
     // key art panel
-    const bob = Math.sin(animT * 1.5) * 3;
-    const artW = 520;
-    const artH = 300;
+    const bob = Math.sin(animT * 1.5) * 2;
+    const artW = 480;
+    const artH = 220;
     const artX = W / 2 - artW / 2;
-    const artY = 36 + bob;
+    const artY = 28 + bob;
     ctx.fillStyle = "rgba(0,0,0,0.35)";
     drawRounded(artX - 6, artY - 6, artW + 12, artH + 12, 16);
     ctx.fill();
@@ -3575,68 +3605,104 @@
       }
     }
 
-    // Title: wordmark + CTA only. Genre jargon / control dumps live in Options & Credits.
+    // Compact wordmark under key art
     ctx.fillStyle = "rgba(20,12,30,0.55)";
-    drawRounded(W / 2 - 200, 300, 400, 70, 12);
+    drawRounded(W / 2 - 170, 248, 340, 48, 12);
     ctx.fill();
     ctx.fillStyle = "#fff";
-    ctx.font = "800 36px Segoe UI,sans-serif";
+    ctx.font = "800 26px Segoe UI,sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("Orange Day", W / 2, 332);
+    ctx.fillText("Orange Day", W / 2, 270);
     ctx.fillStyle = "#ffb347";
-    ctx.font = "700 22px Segoe UI,sans-serif";
-    ctx.fillText("Pocket Republic", W / 2, 360);
+    ctx.font = "700 16px Segoe UI,sans-serif";
+    ctx.fillText("Pocket Republic", W / 2, 290);
 
-    const has = hasSave(1) || hasSave(2) || hasSave(3) || hasSave();
-    // Quiet build chip — not a marketing blurb
+    // Quiet build chip
     ctx.fillStyle = "rgba(20,12,30,0.45)";
-    drawRounded(W / 2 - 48, 10, 96, 20, 8);
+    drawRounded(W / 2 - 48, 8, 96, 18, 8);
     ctx.fill();
     ctx.fillStyle = "#a090b8";
     ctx.font = "bold 10px Cascadia Mono,monospace";
     ctx.textAlign = "center";
-    ctx.fillText(BUILD_ID, W / 2, 24);
+    ctx.fillText(BUILD_ID, W / 2, 21);
 
-    if (has) {
-      const contOn = titleFocus === "continue";
-      ctx.fillStyle = contOn ? `rgba(255,140,40,${0.9 + Math.sin(animT * 4) * 0.1})` : "rgba(80,60,100,0.85)";
-      drawRounded(W / 2 - 270, 420, 250, 48, 12);
+    // Full save cards (3) — no S1/S2 chips
+    titleSaveCards = [];
+    const cardW = 288,
+      cardH = 118,
+      gap = 14;
+    const totalW = 3 * cardW + 2 * gap;
+    const startX = (W - totalW) / 2;
+    const cardY = 318;
+
+    for (let s = 1; s <= 3; s++) {
+      const x = startX + (s - 1) * (cardW + gap);
+      const meta = getSaveMeta(s);
+      const on = saveSlot === s;
+      titleSaveCards.push({ slot: s, x, y: cardY, w: cardW, h: cardH, empty: !meta });
+
+      ctx.fillStyle = on ? "rgba(50,32,70,0.96)" : "rgba(28,20,48,0.92)";
+      drawRounded(x, cardY, cardW, cardH, 12);
       ctx.fill();
-      ctx.fillStyle = contOn ? "#1a0f20" : "#ddd";
-      ctx.font = "bold 16px Segoe UI,sans-serif";
-      ctx.fillText("Continue · slot " + saveSlot, W / 2 - 145, 450);
+      ctx.strokeStyle = on ? "#ff9a3c" : meta ? "rgba(120,100,160,0.55)" : "rgba(70,55,100,0.5)";
+      ctx.lineWidth = on ? 3 : 1.5;
+      drawRounded(x, cardY, cardW, cardH, 12);
+      ctx.stroke();
 
-      ctx.fillStyle = !contOn ? `rgba(255,140,40,${0.9 + Math.sin(animT * 4) * 0.1})` : "rgba(80,60,100,0.85)";
-      drawRounded(W / 2 + 20, 420, 250, 48, 12);
-      ctx.fill();
-      ctx.fillStyle = !contOn ? "#1a0f20" : "#ddd";
-      ctx.fillText("New Game", W / 2 + 145, 450);
-
-      for (let s = 1; s <= 3; s++) {
-        const on = saveSlot === s;
-        const filled = hasSave(s);
-        ctx.fillStyle = on ? "#ff9a3c" : filled ? "rgba(70,150,110,0.9)" : "rgba(45,38,65,0.9)";
-        drawRounded(W / 2 - 100 + (s - 1) * 70, 485, 60, 26, 6);
-        ctx.fill();
-        if (on) {
-          ctx.strokeStyle = "#fff0c0";
-          ctx.lineWidth = 2;
-          drawRounded(W / 2 - 100 + (s - 1) * 70, 485, 60, 26, 6);
-          ctx.stroke();
+      if (meta) {
+        // Portrait
+        const px = x + 14,
+          py = cardY + 22;
+        if (
+          !drawSprite(`player/${meta.charId}_down_idle`, px, py, 48, 60) &&
+          !drawSprite(`player/${meta.charId}_idle`, px, py, 48, 60)
+        ) {
+          ctx.fillStyle = meta.charColor;
+          ctx.beginPath();
+          ctx.arc(px + 24, py + 28, 22, 0, Math.PI * 2);
+          ctx.fill();
         }
-        ctx.fillStyle = on ? "#1a1020" : filled ? "#e8ffe8" : "#8878a8";
-        ctx.font = "bold 12px sans-serif";
-        ctx.fillText((filled ? "●" : "○") + " " + s, W / 2 - 70 + (s - 1) * 70, 503);
+        ctx.textAlign = "left";
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 15px Segoe UI,sans-serif";
+        fitText(meta.charName, x + 72, cardY + 36, cardW - 88, "left");
+        ctx.fillStyle = "#ffb347";
+        ctx.font = "bold 13px Segoe UI,sans-serif";
+        ctx.fillText("Day " + meta.dayIndex + (meta.midDay ? " · mid-day" : ""), x + 72, cardY + 58);
+        ctx.fillStyle = "#c8b8d8";
+        ctx.font = "12px Segoe UI,sans-serif";
+        fitText(meta.district, x + 72, cardY + 78, cardW - 88, "left");
+        ctx.fillStyle = "#ffd060";
+        ctx.font = "bold 12px Cascadia Mono,monospace";
+        ctx.fillText(meta.coins + "¢", x + 72, cardY + 100);
+        ctx.fillStyle = "#a0d0a8";
+        ctx.fillText(meta.voters + " voters", x + 130, cardY + 100);
+        if (on) {
+          ctx.fillStyle = "#ffb347";
+          ctx.font = "bold 11px Segoe UI,sans-serif";
+          ctx.textAlign = "right";
+          ctx.fillText("Enter →", x + cardW - 14, cardY + 20);
+        }
+      } else {
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#6a5a88";
+        ctx.font = "13px Segoe UI,sans-serif";
+        ctx.fillText("Empty", x + cardW / 2, cardY + 48);
+        ctx.fillStyle = on ? "#ffb347" : "#8878a8";
+        ctx.font = "bold 14px Segoe UI,sans-serif";
+        ctx.fillText("Start new", x + cardW / 2, cardY + 74);
+        if (on) {
+          ctx.fillStyle = "#c8b8d8";
+          ctx.font = "11px Segoe UI,sans-serif";
+          ctx.fillText("Enter to begin", x + cardW / 2, cardY + 96);
+        }
       }
-    } else {
-      const pulse = 0.88 + Math.sin(animT * 4) * 0.12;
-      ctx.fillStyle = `rgba(255,140,40,${pulse})`;
-      drawRounded(W / 2 - 140, 430, 280, 52, 12);
-      ctx.fill();
-      ctx.fillStyle = "#1a0f20";
-      ctx.font = "bold 18px Segoe UI,sans-serif";
-      ctx.fillText("Press Enter / Click", W / 2, 462);
     }
+
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#6a5a88";
+    ctx.font = "11px Segoe UI,sans-serif";
+    ctx.fillText("Click a file · 1–3 · Enter", W / 2, 528);
   }
 
   function drawOptions() {
@@ -4372,17 +4438,17 @@
     }
 
     if (state === "title") {
-      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
-        if (hasSave(1) || hasSave(2) || hasSave(3) || hasSave()) titleFocus = titleFocus === "continue" ? "new" : "continue";
+      if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
+        saveSlot = saveSlot <= 1 ? 3 : saveSlot - 1;
+        titleFocus = hasSave(saveSlot) ? "continue" : "new";
       }
-      if (e.key === "c" || e.key === "C") titleFocus = "continue";
-      if (e.key === "n" || e.key === "N") titleFocus = "new";
+      if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
+        saveSlot = saveSlot >= 3 ? 1 : saveSlot + 1;
+        titleFocus = hasSave(saveSlot) ? "continue" : "new";
+      }
       if (e.key === "1" || e.key === "2" || e.key === "3") {
         saveSlot = parseInt(e.key, 10);
-        toast("Save slot " + saveSlot);
-        if (titleFocus === "continue" && hasSave(saveSlot)) {
-          /* slot ready */
-        }
+        titleFocus = hasSave(saveSlot) ? "continue" : "new";
       }
       if (e.key === "m" || e.key === "M") {
         musicOn = !musicOn;
@@ -4399,15 +4465,14 @@
     if (e.key === "Enter" || e.key === " ") {
       if (state === "title") {
         ensureAudio();
-        if (titleFocus === "continue" && (hasSave(saveSlot) || hasSave())) {
+        // Full save card: filled → load that file; empty → new game into that file
+        if (hasSave(saveSlot)) {
           if (!loadGame(saveSlot)) {
             titleFocus = "new";
             state = "select";
           }
         } else {
-          if (titleFocus === "new") {
-            /* keep other slots */
-          }
+          titleFocus = "new";
           state = "select";
         }
         e.preventDefault();
@@ -4514,18 +4579,25 @@
 
     if (state === "title") {
       ensureAudio();
-      if (hasSave()) {
-        if (mx < W / 2) {
+      // Prefer hit on a full save card
+      const card = titleSaveCards.find((b) => mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h);
+      if (card) {
+        saveSlot = card.slot;
+        if (hasSave(saveSlot)) {
           titleFocus = "continue";
-          if (!loadGame()) {
+          if (!loadGame(saveSlot)) {
             titleFocus = "new";
             state = "select";
           }
         } else {
           titleFocus = "new";
-          clearSave();
           state = "select";
         }
+        return true;
+      }
+      // Click elsewhere: activate selected card
+      if (hasSave(saveSlot)) {
+        if (!loadGame(saveSlot)) state = "select";
       } else {
         state = "select";
       }
