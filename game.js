@@ -132,15 +132,28 @@
   let ngPlusBonus = 0; // soft NG+ coins from last strong week
   const SETTINGS_KEY = "orangeDay_settings_v1";
   const ACHIEVE_KEY = "orangeDay_achieve_v1";
+  const META_KEY = "orangeDay_meta_v1";
   const TIPS_KEY = "orangeDay_tips_v1";
   const BEST_KEY = "orangeDay_best_v1";
   const SLOT_PREFIX = "orangeDay_slot_";
-  let achievements = {}; // id -> unlocked
+  let achievements = {}; // id -> unlocked (public board)
   let tipsSeen = {};
   let bestEnding = null; // { id, title, character }
   let saveSlot = 1; // 1..3
   let showGallery = false;
+  let galleryTab = "achieve"; // achieve | milestones
   let showGlossary = false;
+  // Meta progression (account-wide) — unlocks cast via milestones
+  let meta = {
+    weeksCleared: 0,
+    maxVotersOneWeek: 0,
+    endingsSeen: {},
+    coalitionsWon: {}, // coalition id -> times finished week with it
+    milestones: {}, // id -> true
+    unlockedChars: { tiny: true },
+    charsPlayed: {},
+    weeksNoSteal: 0,
+  };
   let tipQueue = [];
   let tipT = 0;
 
@@ -284,6 +297,8 @@
     "Fountain closed for 'vibes assessment.'",
     "Town Board loses another sticky note.",
   ];
+  const MILESTONES = _D.MILESTONES || [];
+  const ACHIEVEMENT_DEFS = _D.ACHIEVEMENT_DEFS || [];
   const POWER_RANK_COST = _D.POWER_RANK_COST;
   const DAILY_OBJECTIVES = _D.DAILY_OBJECTIVES;
   const CRISES = _D.CRISES;
@@ -2596,6 +2611,9 @@
       if (dayIndex >= MAX_DAYS) unlockAchieve("week_clear", "Election Week Cleared");
       if (outcome && outcome.id === "E1") unlockAchieve("ending_e1", "Ending: Civic Darling");
       if (outcome && outcome.id === "E4") unlockAchieve("ending_e4", "Ending: Money Machine");
+      // Account meta + cast unlocks (milestones)
+      const coalObj = activeCoalition();
+      recordWeekClear(outcome, coalitionLabel(), coalObj ? coalObj.id : null);
       // remember best ending (by axis sum)
       try {
         const score = (axes.street || 0) + (axes.donor || 0) - (axes.heat || 0) * 0.5 + voters.length;
@@ -3825,52 +3843,100 @@
     ctx.fillStyle = "rgba(10,8,20,0.85)";
     ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = "rgba(30,20,50,0.96)";
-    drawRounded(W / 2 - 280, 40, 560, 460, 14);
+    drawRounded(W / 2 - 360, 28, 720, 490, 14);
     ctx.fill();
     ctx.strokeStyle = "#ff9a3c";
     ctx.lineWidth = 2;
-    drawRounded(W / 2 - 280, 40, 560, 460, 14);
+    drawRounded(W / 2 - 360, 28, 720, 490, 14);
     ctx.stroke();
     ctx.textAlign = "center";
     ctx.fillStyle = "#ffb347";
     ctx.font = font(20, "bold");
-    ctx.fillText("Achievement Gallery · G", W / 2, 75);
-    const list = [
-      ["first_voter", "First Voter"],
-      ["half_dex", "Half the Codex"],
-      ["full_dex", "Full Voter Dex"],
-      ["tool", "Multitool Owner"],
-      ["power_max", "Power Tree Max"],
-      ["debate", "Debate Champ"],
-      ["scandal", "Leak Season"],
-      ["march", "March Feet"],
-      ["gala", "Gala Guest"],
-      ["coalition", "Full Bloc"],
-      ["week_clear", "Election Week Cleared"],
-      ["ending_e1", "Ending: Civic Darling"],
-      ["ending_e4", "Ending: Money Machine"],
-      ["five_star", "Five Achievements"],
-      ["grifted", "Grift Recognized"],
-      ["synergy", "Synergy Delivered"],
+    ctx.fillText("Boards · G", W / 2, 58);
+
+    // Tabs: public achievements vs internal milestones
+    const tabs = [
+      { id: "achieve", label: "Public Achievements" },
+      { id: "miles", label: "Milestones (cast unlocks)" },
     ];
-    ctx.textAlign = "left";
-    ctx.font = font(13);
-    list.forEach((row, i) => {
-      const [id, label] = row;
-      const on = !!achievements[id];
-      const col = i % 2;
-      const x = W / 2 - 250 + col * 270;
-      const y = 110 + Math.floor(i / 2) * 28;
-      ctx.fillStyle = on ? "#80e0a0" : "#666";
-      ctx.fillText((on ? "★ " : "○ ") + label, x, y);
+    tabs.forEach((tab, ti) => {
+      const on = galleryTab === tab.id || (tab.id === "achieve" && galleryTab === "achieve");
+      const tx = W / 2 - 200 + ti * 220;
+      ctx.fillStyle = galleryTab === tab.id ? "rgba(255,154,60,0.25)" : "rgba(40,30,60,0.8)";
+      drawRounded(tx, 72, 200, 28, 8);
+      ctx.fill();
+      ctx.fillStyle = galleryTab === tab.id ? "#ffb347" : "#a090b8";
+      ctx.font = font(12, "bold");
+      ctx.fillText(tab.label, tx + 100, 91);
     });
-    ctx.textAlign = "center";
-    ctx.fillStyle = "#a090b8";
-    ctx.font = font(12);
-    ctx.fillText(`${Object.keys(achievements).length} unlocked · Esc/G close`, W / 2, 470);
-    if (bestEnding) {
-      ctx.fillStyle = "#ffd080";
-      ctx.fillText(`Best ending: ${bestEnding.title} (${bestEnding.character})`, W / 2, 445);
+
+    ctx.textAlign = "left";
+    if (galleryTab === "miles") {
+      ctx.fillStyle = "#c8b8d8";
+      ctx.font = font(12);
+      ctx.fillText(
+        `Weeks cleared: ${meta.weeksCleared || 0} · Best voters/week: ${meta.maxVotersOneWeek || 0} · Cast: ${Object.keys(meta.unlockedChars || {}).filter((k) => meta.unlockedChars[k]).length}/6`,
+        W / 2 - 330,
+        120
+      );
+      MILESTONES.forEach((ms, i) => {
+        const on = !!meta.milestones[ms.id] || !!ms.auto;
+        const y = 148 + i * 42;
+        ctx.fillStyle = on ? "rgba(40,80,55,0.5)" : "rgba(40,30,50,0.55)";
+        drawRounded(W / 2 - 330, y - 16, 660, 38, 8);
+        ctx.fill();
+        ctx.fillStyle = on ? "#80e0a0" : "#8878a8";
+        ctx.font = font(14, "bold");
+        ctx.fillText((on ? "✓ " : "○ ") + ms.name, W / 2 - 318, y + 2);
+        ctx.fillStyle = on ? "#c8d8c8" : "#666";
+        ctx.font = font(11);
+        const unlockNames = (ms.unlocks || [])
+          .map((id) => {
+            const c = CHARACTERS.find((x) => x.id === id);
+            return c ? c.short : id;
+          })
+          .join(", ");
+        fitText(ms.desc + (unlockNames ? "  →  " + unlockNames : ""), W / 2 - 318, y + 18, 640, "left");
+      });
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#8878a8";
+      ctx.font = font(11);
+      ctx.fillText("Tab / click tabs · Esc/G close · milestones unlock cast for new weeks", W / 2, 500);
+    } else {
+      // Public store-ready board
+      const list = ACHIEVEMENT_DEFS.length
+        ? ACHIEVEMENT_DEFS
+        : [
+            { id: "first_voter", title: "First Voter", desc: "", tier: "bronze" },
+          ];
+      const unlockedN = list.filter((a) => achievements[a.id]).length;
+      ctx.fillStyle = "#a090b8";
+      ctx.font = font(12);
+      ctx.fillText(`Store board · ${unlockedN}/${list.length} · IDs ready for Steam / Play / App Store`, W / 2 - 330, 120);
+      list.forEach((a, i) => {
+        const on = !!achievements[a.id];
+        const col = i % 2;
+        const row = Math.floor(i / 2);
+        const x = W / 2 - 330 + col * 340;
+        const y = 140 + row * 34;
+        ctx.fillStyle = on ? "rgba(50,90,60,0.45)" : "rgba(35,28,50,0.55)";
+        drawRounded(x, y - 12, 328, 30, 6);
+        ctx.fill();
+        ctx.fillStyle = on ? "#ffd060" : "#555";
+        ctx.font = font(13, "bold");
+        fitText((on ? "★ " : "○ ") + (a.icon || "") + " " + a.title, x + 8, y + 4, 200, "left");
+        ctx.fillStyle = on ? "#a8c8a8" : "#555";
+        ctx.font = font(10);
+        fitText(a.tier || "", x + 220, y + 4, 90, "left");
+      });
+      ctx.textAlign = "center";
+      ctx.fillStyle = "#8878a8";
+      ctx.font = font(11);
+      ctx.fillText("Public board for store pages · Tab for milestones · Esc/G close", W / 2, 500);
+      if (bestEnding) {
+        ctx.fillStyle = "#ffd080";
+        ctx.fillText(`Best ending: ${bestEnding.title} (${bestEnding.character})`, W / 2, 478);
+      }
     }
   }
 
@@ -4133,7 +4199,8 @@
     ctx.fillText("Choose your civic avatar", W / 2, 40);
     ctx.fillStyle = "#a090b8";
     ctx.font = "12px Segoe UI,sans-serif";
-    ctx.fillText("← → select · Enter/click · pick your civic avatar", W / 2, 62);
+    const nUn = Object.keys(meta.unlockedChars || {}).filter((k) => meta.unlockedChars[k]).length;
+    ctx.fillText(`← → · Enter · ${nUn}/6 unlocked · G milestones`, W / 2, 62);
 
     const cols = 3;
     const cardW = 280;
@@ -4149,13 +4216,18 @@
       const x = startX + col * (cardW + gap);
       const y = y0 + row * (cardH + gap);
       const sel = i === charIdx;
+      const unlocked = isCharUnlocked(c.id);
       const pad = 12;
       const innerW = cardW - pad * 2;
 
-      ctx.fillStyle = sel ? "rgba(255,140,40,0.2)" : "rgba(40,30,60,0.92)";
+      ctx.fillStyle = !unlocked
+        ? "rgba(20,16,30,0.92)"
+        : sel
+          ? "rgba(255,140,40,0.2)"
+          : "rgba(40,30,60,0.92)";
       drawRounded(x, y, cardW, cardH, 12);
       ctx.fill();
-      ctx.strokeStyle = sel ? "#ff9a3c" : "#4a3a68";
+      ctx.strokeStyle = sel ? "#ff9a3c" : unlocked ? "#4a3a68" : "#333048";
       ctx.lineWidth = sel ? 3 : 1;
       ctx.stroke();
 
@@ -4164,29 +4236,46 @@
       ctx.clip();
 
       const ab = Math.sin(animT * 3 + i) * 2;
-      if (
-        !drawSprite(`player/${c.id}_down_idle`, x + 12, y + 24 + ab, 56, 70) &&
-        !drawSprite(`player/${c.id}_idle`, x + 12, y + 24 + ab, 56, 70)
-      ) {
-        ctx.fillStyle = c.color;
+      if (unlocked) {
+        if (
+          !drawSprite(`player/${c.id}_down_idle`, x + 12, y + 24 + ab, 56, 70) &&
+          !drawSprite(`player/${c.id}_idle`, x + 12, y + 24 + ab, 56, 70)
+        ) {
+          ctx.fillStyle = c.color;
+          ctx.beginPath();
+          ctx.arc(x + 40, y + 55, 24, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else {
+        ctx.fillStyle = "#2a2438";
         ctx.beginPath();
         ctx.arc(x + 40, y + 55, 24, 0, Math.PI * 2);
         ctx.fill();
+        ctx.fillStyle = "#665";
+        ctx.font = "bold 22px Segoe UI,sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("🔒", x + 40, y + 62);
       }
 
-      ctx.fillStyle = "#fff";
-      ctx.font = "bold 14px Segoe UI,sans-serif";
       ctx.textAlign = "left";
-      fitText(c.name, x + 80, y + 42, innerW - 70, "left");
-      ctx.fillStyle = c.accent;
-      ctx.font = "bold 11px Segoe UI,sans-serif";
-      fitText(c.power, x + 80, y + 60, innerW - 70, "left");
-      ctx.fillStyle = "#c8b8d8";
-      ctx.font = "11px Segoe UI,sans-serif";
-      wrapText(c.blurb, x + 80, y + 80, innerW - 70, 14, 3, "left");
-      ctx.fillStyle = "#e0a0a0";
-      ctx.font = "10px Segoe UI,sans-serif";
-      wrapText("Weak: " + c.weakness, x + pad, y + cardH - 28, innerW, 13, 2, "left");
+      ctx.fillStyle = unlocked ? "#fff" : "#777";
+      ctx.font = "bold 14px Segoe UI,sans-serif";
+      fitText(unlocked ? c.name : "???", x + 80, y + 42, innerW - 70, "left");
+      if (unlocked) {
+        ctx.fillStyle = c.accent;
+        ctx.font = "bold 11px Segoe UI,sans-serif";
+        fitText(c.power, x + 80, y + 60, innerW - 70, "left");
+        ctx.fillStyle = "#c8b8d8";
+        ctx.font = "11px Segoe UI,sans-serif";
+        wrapText(c.blurb, x + 80, y + 80, innerW - 70, 14, 3, "left");
+        ctx.fillStyle = "#e0a0a0";
+        ctx.font = "10px Segoe UI,sans-serif";
+        wrapText("Weak: " + c.weakness, x + pad, y + cardH - 28, innerW, 13, 2, "left");
+      } else {
+        ctx.fillStyle = "#9988aa";
+        ctx.font = "11px Segoe UI,sans-serif";
+        wrapText(charUnlockHint(c.id).replace(/^🔒\s*/, ""), x + 80, y + 70, innerW - 70, 14, 4, "left");
+      }
 
       ctx.restore();
     });
@@ -4194,7 +4283,13 @@
     ctx.fillStyle = "#8878a8";
     ctx.font = "12px Segoe UI,sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("Click a card or press Enter", W / 2, H - 18);
+    const cur = CHARACTERS[charIdx];
+    if (cur && !isCharUnlocked(cur.id)) {
+      ctx.fillStyle = "#e0a080";
+      ctx.fillText(charUnlockHint(cur.id) + " · G for milestone board", W / 2, H - 18);
+    } else {
+      ctx.fillText("Enter to start · locked cast needs milestones (G)", W / 2, H - 18);
+    }
   }
 
   let pauseButtons = [];
@@ -4436,13 +4531,14 @@
       e.preventDefault();
     }
     if (e.key === "g" || e.key === "G") {
-      if (state === "play" || state === "title" || state === "pause" || state === "results") {
+      if (state === "play" || state === "title" || state === "pause" || state === "results" || state === "select") {
         showGallery = !showGallery;
         if (showGallery) {
           showOptions = false;
           showCredits = false;
           showGlossary = false;
           showCodex = false;
+          galleryTab = "achieve";
         }
         e.preventDefault();
       }
@@ -4463,6 +4559,10 @@
       if (e.key === "Escape") {
         showGallery = false;
         showGlossary = false;
+        e.preventDefault();
+      }
+      if (showGallery && (e.key === "Tab" || e.key === "m" || e.key === "M")) {
+        galleryTab = galleryTab === "achieve" ? "miles" : "achieve";
         e.preventDefault();
       }
       return;
@@ -4564,10 +4664,17 @@
         }
         e.preventDefault();
       } else if (state === "select") {
-        resetRun(CHARACTERS[charIdx]);
-        state = "play";
-        toast(`You wake as ${selected.name}. Day ${dayIndex} — check the Town Board.`);
-        e.preventDefault();
+        const pick = CHARACTERS[charIdx];
+        if (!isCharUnlocked(pick.id)) {
+          toast(charUnlockHint(pick.id));
+          sfx("warn");
+          e.preventDefault();
+        } else {
+          resetRun(pick);
+          state = "play";
+          toast(`You wake as ${selected.name}. Check the Town Board.`);
+          e.preventDefault();
+        }
       } else if (state === "evening") {
         finishEvening();
         e.preventDefault();
@@ -4655,8 +4762,18 @@
       return true;
     }
 
-    if (showOptions || showGallery || showGlossary || showCredits) {
-      showOptions = showGallery = showGlossary = showCredits = false;
+    if (showGallery) {
+      // Left tab achievements, right tab milestones
+      if (my >= 70 && my <= 105) {
+        galleryTab = mx < W / 2 ? "achieve" : "miles";
+      } else {
+        showGallery = false;
+      }
+      if (fromTouch && e.cancelable) e.preventDefault();
+      return true;
+    }
+    if (showOptions || showGlossary || showCredits) {
+      showOptions = showGlossary = showCredits = false;
       if (fromTouch && e.cancelable) e.preventDefault();
       return true;
     }
@@ -4711,11 +4828,17 @@
         const y = y0 + row * (cardH + gap);
         if (mx >= x && mx <= x + cardW && my >= y && my <= y + cardH) {
           charIdx = i;
-          resetRun(CHARACTERS[charIdx]);
-          state = "play";
-          toast(`You wake as ${selected.name}. Check the Town Board.`);
+          if (!isCharUnlocked(c.id)) {
+            toast(charUnlockHint(c.id));
+            sfx("warn");
+          } else {
+            resetRun(c);
+            state = "play";
+            toast(`You wake as ${selected.name}. Check the Town Board.`);
+          }
         }
       });
+      // Gallery tab hits when board open
       return true;
     }
     if (state === "evening") {
@@ -4875,14 +4998,126 @@
     } catch (_) {}
   }
 
+  function saveMeta() {
+    try {
+      if (typeof localStorage !== "undefined") localStorage.setItem(META_KEY, JSON.stringify(meta));
+    } catch (_) {}
+  }
+
+  function loadMeta() {
+    try {
+      if (typeof localStorage === "undefined") return;
+      const raw = localStorage.getItem(META_KEY);
+      if (raw) {
+        const m = JSON.parse(raw);
+        meta = Object.assign(meta, m || {});
+      }
+      if (!meta.unlockedChars) meta.unlockedChars = { tiny: true };
+      meta.unlockedChars.tiny = true;
+      // Auto milestones
+      MILESTONES.forEach((ms) => {
+        if (ms.auto) {
+          meta.milestones[ms.id] = true;
+          (ms.unlocks || []).forEach((id) => {
+            meta.unlockedChars[id] = true;
+          });
+        }
+      });
+      evaluateMilestones(false);
+    } catch (_) {}
+  }
+
+  function isCharUnlocked(id) {
+    return !!(meta.unlockedChars && meta.unlockedChars[id]);
+  }
+
+  function charUnlockHint(id) {
+    if (isCharUnlocked(id)) return "";
+    const ms = MILESTONES.find((m) => (m.unlocks || []).includes(id) && !m.auto);
+    return ms ? "🔒 " + ms.desc : "🔒 Locked";
+  }
+
+  function evaluateMilestones(announce) {
+    let newly = [];
+    MILESTONES.forEach((ms) => {
+      if (meta.milestones[ms.id]) return;
+      if (ms.auto) {
+        meta.milestones[ms.id] = true;
+        return;
+      }
+      const n = ms.need || {};
+      let ok = true;
+      if (n.weeksCleared != null && (meta.weeksCleared || 0) < n.weeksCleared) ok = false;
+      if (n.maxVotersOneWeek != null && (meta.maxVotersOneWeek || 0) < n.maxVotersOneWeek) ok = false;
+      if (n.coalition) {
+        const times = (meta.coalitionsWon && meta.coalitionsWon[n.coalition]) || 0;
+        if (times < 1) ok = false;
+      }
+      if (!ok) return;
+      meta.milestones[ms.id] = true;
+      (ms.unlocks || []).forEach((cid) => {
+        if (!meta.unlockedChars[cid]) {
+          meta.unlockedChars[cid] = true;
+          newly.push({ char: cid, ms: ms.name });
+        } else {
+          meta.unlockedChars[cid] = true;
+        }
+      });
+      if (announce) {
+        banner("MILESTONE: " + ms.name, "#80e0ff", 2.4);
+        toast("Milestone: " + ms.name);
+      }
+    });
+    // Public achievements tied to progression
+    const unlockedCount = Object.keys(meta.unlockedChars || {}).filter((k) => meta.unlockedChars[k]).length;
+    if (unlockedCount >= 2) unlockAchieve("first_milestone", "Cast Call");
+    if (unlockedCount >= 6) unlockAchieve("full_cast", "Full Cast");
+    if ((meta.weeksCleared || 0) >= 3) unlockAchieve("three_weeks", "Three Seasons");
+    saveMeta();
+    if (announce && newly.length) {
+      newly.forEach((n) => {
+        const c = CHARACTERS.find((x) => x.id === n.char);
+        toast("Unlocked: " + (c ? c.name : n.char) + "!");
+      });
+      sfx("sting");
+    }
+    return newly;
+  }
+
+  /** Call at Election Night — advances account meta without rewriting run balance. */
+  function recordWeekClear(outcome, coalLabel, coalId) {
+    meta.weeksCleared = (meta.weeksCleared || 0) + 1;
+    meta.maxVotersOneWeek = Math.max(meta.maxVotersOneWeek || 0, voters.length);
+    if (outcome && outcome.id) {
+      meta.endingsSeen = meta.endingsSeen || {};
+      meta.endingsSeen[outcome.id] = true;
+    }
+    if (coalId) {
+      meta.coalitionsWon = meta.coalitionsWon || {};
+      meta.coalitionsWon[coalId] = (meta.coalitionsWon[coalId] || 0) + 1;
+    }
+    if (selected) {
+      meta.charsPlayed = meta.charsPlayed || {};
+      meta.charsPlayed[selected.id] = true;
+    }
+    if ((rivalStealsWeek || 0) === 0) {
+      meta.weeksNoSteal = (meta.weeksNoSteal || 0) + 1;
+      unlockAchieve("no_steal", "Tight Ship");
+    }
+    evaluateMilestones(true);
+    saveMeta();
+  }
+
   function unlockAchieve(id, label) {
     if (achievements[id]) return;
     achievements[id] = true;
     try {
       if (typeof localStorage !== "undefined") localStorage.setItem(ACHIEVE_KEY, JSON.stringify(achievements));
     } catch (_) {}
-    banner("★ " + label, "#ffd060", 2.5);
-    toast("Achievement: " + label);
+    const def = ACHIEVEMENT_DEFS.find((a) => a.id === id);
+    const title = (def && def.title) || label || id;
+    banner("★ " + title, "#ffd060", 2.5);
+    toast("Achievement: " + title);
     sfx("ok");
   }
 
@@ -4899,9 +5134,15 @@
     const c = activeCoalition();
     if (c && c.strength >= 3) unlockAchieve("coalition", "Full Bloc: " + c.name);
     if (Object.keys(achievements).length >= 5) unlockAchieve("five_star", "Five Achievements");
+    // Mid-run voter milestones feed meta for unlocks without waiting for election
+    if (voters.length > (meta.maxVotersOneWeek || 0)) {
+      meta.maxVotersOneWeek = voters.length;
+      evaluateMilestones(true);
+    }
   }
 
   loadSettings();
+  loadMeta();
 
   // Expose debug + QA hooks (browser console / smoke.js)
   window.ORANGE_DAY = {
@@ -4948,10 +5189,24 @@
     qa: {
       startCharacter(i) {
         charIdx = ((i % CHARACTERS.length) + CHARACTERS.length) % CHARACTERS.length;
+        // QA bypass: unlock all cast for automated routes
+        CHARACTERS.forEach((c) => {
+          meta.unlockedChars[c.id] = true;
+        });
         resetRun(CHARACTERS[charIdx]);
         state = "play";
         return selected.id;
       },
+      unlockAllChars() {
+        CHARACTERS.forEach((c) => {
+          meta.unlockedChars[c.id] = true;
+        });
+        saveMeta();
+      },
+      get meta() {
+        return JSON.parse(JSON.stringify(meta));
+      },
+      recordWeekClear,
       activeCoalition,
       addAxes,
       triggerRivalSpat,

@@ -330,6 +330,86 @@ const MICRO_EVENTS = [
   { id: "lawn_tip", text: "A Lawn Guardian tips you off. Codex whisper.", axes: { street: 1 } },
 ];
 
+// ─── Meta progression: milestones unlock cast ─────────────────
+// Internal tracker (not Steam API). Completing a milestone unlocks characters.
+// Starter is always free so the first week is always playable.
+const MILESTONES = [
+  {
+    id: "ms_open_plaza",
+    name: "Open the Plaza",
+    desc: "Always free — Tiny starts unlocked.",
+    unlocks: ["tiny"],
+    auto: true,
+  },
+  {
+    id: "ms_first_week",
+    name: "First Election Night",
+    desc: "Finish a full week once (any ending).",
+    unlocks: ["alex"],
+    need: { weeksCleared: 1 },
+  },
+  {
+    id: "ms_street_week",
+    name: "Street Cred Season",
+    desc: "Clear a week while holding a Grassroots coalition on Election Night.",
+    unlocks: ["mayor"],
+    need: { weeksCleared: 1, coalition: "grassroots" },
+  },
+  {
+    id: "ms_half_map",
+    name: "Half the Town",
+    desc: "Recruit 6 voter blocs in a single week.",
+    unlocks: ["bernie"],
+    need: { maxVotersOneWeek: 6 },
+  },
+  {
+    id: "ms_full_dex",
+    name: "Full Roll Call",
+    desc: "Recruit all 12 voter blocs in one week.",
+    unlocks: ["leon"],
+    need: { maxVotersOneWeek: 12 },
+  },
+  {
+    id: "ms_money_week",
+    name: "Money Machine Season",
+    desc: "Clear a week while holding a Money Machine coalition.",
+    unlocks: ["donny"],
+    need: { weeksCleared: 1, coalition: "money" },
+  },
+  {
+    id: "ms_veteran",
+    name: "Seasoned Operator",
+    desc: "Clear 3 election weeks (any paths).",
+    unlocks: ["alex", "mayor", "bernie", "leon", "donny"],
+    need: { weeksCleared: 3 },
+  },
+];
+
+// Public achievement board — store-ready catalog (Steam / Play / App Store map)
+// apiName = stable ID for store dashboards; keep IDs short and stable forever.
+const ACHIEVEMENT_DEFS = [
+  { id: "first_voter", apiName: "ACH_FIRST_VOTER", title: "First Voter", desc: "Recruit your first voter bloc.", icon: "★", tier: "bronze" },
+  { id: "half_dex", apiName: "ACH_HALF_DEX", title: "Half the Codex", desc: "Recruit 6 voter blocs in one week.", icon: "📖", tier: "bronze" },
+  { id: "full_dex", apiName: "ACH_FULL_DEX", title: "Full Voter Dex", desc: "Recruit all 12 voter blocs in one week.", icon: "📚", tier: "gold" },
+  { id: "tool", apiName: "ACH_TOOL", title: "Multitool Owner", desc: "Buy the Pocket Multitool upgrade.", icon: "🔧", tier: "bronze" },
+  { id: "power_max", apiName: "ACH_POWER_MAX", title: "Power Tree Max", desc: "Max a character power to rank 3.", icon: "⚡", tier: "silver" },
+  { id: "debate", apiName: "ACH_DEBATE", title: "Debate Champ", desc: "Win the Plaza Debate.", icon: "🎤", tier: "silver" },
+  { id: "scandal", apiName: "ACH_SCANDAL", title: "Leak Season", desc: "Run the Scandal Leak setpiece.", icon: "📰", tier: "bronze" },
+  { id: "march", apiName: "ACH_MARCH", title: "March Feet", desc: "Join the Union March.", icon: "✊", tier: "bronze" },
+  { id: "gala", apiName: "ACH_GALA", title: "Gala Guest", desc: "Work the Donor Gala.", icon: "🥂", tier: "bronze" },
+  { id: "coalition", apiName: "ACH_COALITION", title: "Full Bloc", desc: "Form a full-strength coalition.", icon: "🤝", tier: "silver" },
+  { id: "week_clear", apiName: "ACH_WEEK_CLEAR", title: "Election Week Cleared", desc: "Reach Election Night.", icon: "🗳️", tier: "silver" },
+  { id: "ending_e1", apiName: "ACH_ENDING_E1", title: "Ending: Civic Darling", desc: "Finish with the Civic Darling ending.", icon: "🏛", tier: "gold" },
+  { id: "ending_e4", apiName: "ACH_ENDING_E4", title: "Ending: Money Machine", desc: "Finish with the Money Machine ending.", icon: "💰", tier: "gold" },
+  { id: "five_star", apiName: "ACH_FIVE_STAR", title: "Five Achievements", desc: "Unlock any five achievements.", icon: "⭐", tier: "bronze" },
+  { id: "grifted", apiName: "ACH_GRIFTED", title: "Grift Recognized", desc: "Expose Paver Pete's pothole scam.", icon: "🕳", tier: "silver" },
+  { id: "synergy", apiName: "ACH_SYNERGY", title: "Synergy Delivered", desc: "Buy three Consultant Cole memos.", icon: "📎", tier: "silver" },
+  { id: "first_milestone", apiName: "ACH_FIRST_MS", title: "Cast Call", desc: "Unlock a second playable character.", icon: "🎭", tier: "bronze" },
+  { id: "full_cast", apiName: "ACH_FULL_CAST", title: "Full Cast", desc: "Unlock every playable character.", icon: "🎬", tier: "gold" },
+  { id: "three_weeks", apiName: "ACH_THREE_WEEKS", title: "Three Seasons", desc: "Clear three election weeks.", icon: "📅", tier: "silver" },
+  { id: "no_steal", apiName: "ACH_NO_STEAL", title: "Tight Ship", desc: "Clear a week with zero rival poaches.", icon: "🛡", tier: "silver" },
+];
+
 // Civic Texture Pack — morning headline ticker (flavor only, zero balance)
 const HEADLINES = [
   "Fountain closed for 'vibes assessment.'",
@@ -701,6 +781,8 @@ global.ORANGE_DATA = {
   BOARD_RULES,
   MICRO_EVENTS,
   HEADLINES,
+  MILESTONES,
+  ACHIEVEMENT_DEFS,
   POWER_RANK_COST,
   DAILY_OBJECTIVES,
   CRISES,
