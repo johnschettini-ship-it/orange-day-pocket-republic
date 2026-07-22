@@ -330,6 +330,25 @@ const MICRO_EVENTS = [
   { id: "lawn_tip", text: "A Lawn Guardian tips you off. Codex whisper.", axes: { street: 1 } },
 ];
 
+// Civic Texture Pack — morning headline ticker (flavor only, zero balance)
+const HEADLINES = [
+  "Fountain closed for 'vibes assessment.'",
+  "Town Board loses third sticky note this week.",
+  "Local pigeons form PAC; refuse to disclose donors.",
+  "Coffee cart declared critical infrastructure.",
+  "Oversized mailbox still oversized; study pending.",
+  "Consultant invoices city for word 'synergy.'",
+  "Debate stage: one mic working, one philosophically working.",
+  "Campus petition table runs out of pens, not opinions.",
+  "Media Alley traffic jammed by exclusive 'no comment.'",
+  "Donor Heights valet confuses campaign for wedding.",
+  "Pothole named after committee that failed to fill it.",
+  "Election Eve: everyone claims they were undecided.",
+  "Budget Owl seen nodding at thrift, not at fun.",
+  "Alley shortcut 'definitely not haunted,' says clerk.",
+  "Free buttons still cost your dignity, interns confirm.",
+];
+
 const POWER_RANK_COST = [0, 18, 36, 55]; // v1.0: reachable within a week
 
 // Rotating day-by-day objectives — each day of the 7-day week gets its own
@@ -681,6 +700,7 @@ global.ORANGE_DATA = {
   COALITIONS,
   BOARD_RULES,
   MICRO_EVENTS,
+  HEADLINES,
   POWER_RANK_COST,
   DAILY_OBJECTIVES,
   CRISES,

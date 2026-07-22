@@ -280,6 +280,10 @@
   const COALITIONS = _D.COALITIONS;
   const BOARD_RULES = _D.BOARD_RULES;
   const MICRO_EVENTS = _D.MICRO_EVENTS;
+  const HEADLINES = _D.HEADLINES || [
+    "Fountain closed for 'vibes assessment.'",
+    "Town Board loses another sticky note.",
+  ];
   const POWER_RANK_COST = _D.POWER_RANK_COST;
   const DAILY_OBJECTIVES = _D.DAILY_OBJECTIVES;
   const CRISES = _D.CRISES;
@@ -340,6 +344,17 @@
   let recruitsToday = 0; // successful new joins this calendar day
   let boardTipId = null; // daily uncommitted bloc sticky on BOARD
   const RIVAL_NAME = "Rival Campaign (Generic)"; // fictional archetype, no real people
+  // Civic Texture Pack
+  let dayHeadline = "";
+  let photoDay = 0; // booth photo-op once/day
+  let pigeonPecks = 0; // 3 → conspiracy whisper
+  let pigeonDoneWeek = false;
+  let fountainToyDay = 0; // Tiny crawl once/day
+  let beansCoffeeDay = 0; // Bernie free drip once/day
+  let micChain = []; // Rally: recent talk timestamps for human-mic
+  let coalFanfareId = null; // coalition id that already got fanfare this week
+  let coalPerkDay = 0; // day number while one-day coin/button perk active
+  let reconDay = 0; // spat reconciliation once/day
   let hasPermit = false;
   let permitDelivered = false;
   let coffeeFixed = false;
@@ -469,6 +484,16 @@
     districtsVisitedToday = { plaza: true };
     recruitsToday = 0;
     boardTipId = null;
+    dayHeadline = "";
+    photoDay = 0;
+    pigeonPecks = 0;
+    pigeonDoneWeek = false;
+    fountainToyDay = 0;
+    beansCoffeeDay = 0;
+    micChain = [];
+    coalFanfareId = null;
+    coalPerkDay = 0;
+    reconDay = 0;
     upgraded = false;
     toolLevel = 0;
     lockedOpen = false;
@@ -526,15 +551,23 @@
     recruitsToday = 0;
     rivalStoleToday = false;
     boardTipId = pickBoardTipId();
+    dayHeadline = HEADLINES[(dayIndex * 3 + (selected ? selected.id.length : 0)) % HEADLINES.length];
+    photoDay = 0; // reset daily flags that should re-arm
+    fountainToyDay = 0;
+    beansCoffeeDay = 0;
+    reconDay = 0;
+    micChain = [];
+    if (coalPerkDay && coalPerkDay !== dayIndex) coalPerkDay = 0;
     const crisis = getCrisis();
     const rule = getBoardRule();
     const unlockedToday = DISTRICTS.filter((d) => d.id !== "plaza" && d.unlockDay === dayIndex).map((d) => d.name);
     let morning = `Day ${dayIndex}/${MAX_DAYS}: ${crisis.title} · Rule: ${rule.title}`;
     if (unlockedToday.length) morning += ` · Opens: ${unlockedToday.join(", ")}`;
-    msg = morning;
-    msgT = unlockedToday.length ? 5.5 : 4.5;
+    msg = morning + (dayHeadline ? "  ·  📰 " + dayHeadline : "");
+    msgT = unlockedToday.length ? 5.8 : 5.0;
     if (isNewRun) log = [];
     pushLog(`Morning — Day ${dayIndex}. Crisis: ${crisis.title}. Rule: ${rule.title}.`);
+    if (dayHeadline) pushLog("Headline: " + dayHeadline);
     if (unlockedToday.length) pushLog("District open: " + unlockedToday.join(", ") + ".");
     if (boardTipId) {
       const tipG = VOTER_GROUPS.find((v) => v.id === boardTipId);
@@ -812,6 +845,7 @@
     queueTip("codex", "C = voter codex · G = achievements · H = glossary · O = options.");
     queueTip("slots", "Title screen: keys 1/2/3 pick a save slot before Continue.");
     queueTip("favor", "Voters need ERRANDS (favor), not small talk. Check codex hints.");
+    queueTip("texture", "Peck pigeons · booth photo · park can cool spats for 8¢.");
   }
 
   // ─── Helpers ─────────────────────────────────────────────────
@@ -1164,7 +1198,54 @@
     banner(`SPAT: ${g.name} vs ${rival ? rival.name : "rivals"}!`, g.color, 2.2);
     sfx("warn");
     pushLog(`Rival spat: ${g.name} vs ${rival ? rival.name : g.rival}.`);
-    toast(`${g.name} clash with ${rival ? rival.name : "rivals"} in the plaza.`);
+    toast(`${g.name} clash with ${rival ? rival.name : "rivals"} in the plaza. Park + 8¢ can cool it later.`);
+  }
+
+  /** Texture pack: pay 8¢ at park (or park talk) to heal half a spat once/day */
+  function trySpatReconciliation(fromPark) {
+    if (spatCount <= 0) {
+      if (fromPark) toast("No active spat to cool. Peace is expensive only when broken.");
+      return false;
+    }
+    if (reconDay === dayIndex) {
+      toast("Reconciliation already filed today. Bureaucracy limits forgiveness.");
+      return false;
+    }
+    if (coins < 8) {
+      toast("Need 8¢ for a peace offering (coffee + apology sticky).");
+      sfx("warn");
+      return false;
+    }
+    coins -= 8;
+    reconDay = dayIndex;
+    spatCount = Math.max(0, spatCount - 1);
+    // Heal the two lowest-loyalty recruited blocs a bit
+    const soft = voters
+      .map((id) => ({ id, L: voterLoyalty[id] || 50 }))
+      .sort((a, b) => a.L - b.L)
+      .slice(0, 2);
+    soft.forEach((x) => {
+      voterLoyalty[x.id] = clamp((voterLoyalty[x.id] || 50) + 8, 8, 100);
+    });
+    addAxes({ street: 1, heat: -1 });
+    floatText(player.x, player.y - 22, "-8¢ peace", "#80e0a0");
+    toast("Spat cooled. Soft blocs recover a little loyalty. Heat eases.");
+    pushLog("Reconciliation: paid 8¢, spatCount now " + spatCount + ".");
+    sfx("ok");
+    return true;
+  }
+
+  function maybeCoalitionFanfare() {
+    const c = activeCoalition();
+    if (!c || c.strength < 2) return;
+    if (coalFanfareId === c.id) return;
+    coalFanfareId = c.id;
+    coalPerkDay = dayIndex;
+    banner(c.name.toUpperCase() + " FORMS!", c.color || "#ffb347", 2.4);
+    toast(`${c.name} locks in! Today only: cheaper buttons (−1¢) & a swagger tax refund (+2¢ on recruit).`);
+    pushLog("Coalition fanfare: " + c.name + " (one-day perk).");
+    sfx("sting");
+    punch(0.2);
   }
 
   function banner(text, color, sec = 2) {
@@ -1208,7 +1289,9 @@
     recruitsToday = (recruitsToday | 0) + 1;
     bumpObj("voters", 1);
     addAxes({ street: 3, donor: g.id === "donors" || g.id === "crypto" ? 3 : 1, heat: g.id === "chaos" || g.id === "conspiracy" ? 2 : 0 });
-    addCoins(3);
+    let joinCoins = 3;
+    if (coalPerkDay === dayIndex) joinCoins += 2; // fanfare perk
+    addCoins(joinCoins);
     burst(player.x, player.y, g.color, 16);
     floatText(player.x, player.y - 40, `+${g.name}!`, g.color);
     balloon(player.x, player.y - 50, g.name + " joined!", 2);
@@ -1218,6 +1301,7 @@
     pushLog(`Recruited ${g.name} after errands (${need} favor). Loyalty ${voterLoyalty[groupId]}.`);
     toast(`Coalition grows: ${g.name} joined!`);
     if (g.rival && voters.includes(g.rival)) triggerRivalSpat(groupId);
+    maybeCoalitionFanfare();
     checkAchievements();
     return true;
   }
@@ -1305,6 +1389,12 @@
     for (const b of BUTTON_SPOTS) {
       if (!b.taken) list.push({ type: "button", ref: b, d: dist(player.x, player.y, b.x, b.y) });
     }
+    // Texture: peckable pigeons from clutter
+    for (const cl of CLUTTER) {
+      if (cl.key && String(cl.key).indexOf("pigeon") >= 0) {
+        list.push({ type: "pigeon", ref: cl, d: dist(player.x, player.y, cl.x, cl.y) });
+      }
+    }
     list.sort((a, b) => a.d - b.d);
     return list[0] && list[0].d < INTERACT_R ? list[0] : null;
   }
@@ -1334,14 +1424,57 @@
       return;
     }
 
+    if (hit.type === "pigeon") {
+      interactPigeon(hit.ref);
+      return;
+    }
+
     if (hit.type === "npc") {
       talkNpc(hit.ref);
+      noteMicChainTalk();
       return;
     }
 
     if (hit.type === "zone") {
       useZone(hit.ref);
     }
+  }
+
+  function noteMicChainTalk() {
+    // Rally Queen toy: 3 talks within ~18s near activity → student favor
+    if (!selected || selected.id !== "alex") return;
+    const now = performance.now();
+    micChain.push(now);
+    micChain = micChain.filter((t) => now - t < 18000);
+    if (micChain.length >= 3) {
+      micChain = [];
+      bumpFavor("students", 1);
+      banner("HUMAN MIC", "#3ecf8e", 1.5);
+      toast("Human mic chain! Three conversations — Students notice.");
+      pushLog("Rally Queen human-mic chain complete.");
+    }
+  }
+
+  function interactPigeon(cl) {
+    if (pigeonDoneWeek) {
+      toast("The pigeons have already filed their report. Coo.");
+      return;
+    }
+    pigeonPecks++;
+    sfx("blip");
+    if (pigeonPecks < 3) {
+      toast(`Pigeon side-eye (${pigeonPecks}/3). It knows something.`);
+      balloon(cl.x, cl.y - 20, "coo?", 1.2);
+      return;
+    }
+    pigeonDoneWeek = true;
+    pigeonPecks = 3;
+    addAxes({ heat: 1 });
+    bumpFavor("conspiracy", 1);
+    toast("Pigeon drops a crumb of 'intel.' Conspiracy Podcasters interested.");
+    pushLog("Pigeon conspiracy (3 pecks) — favor toward Conspiracy.");
+    burst(cl.x, cl.y, "#c0c0d0", 10);
+    sfx("ok");
   }
 
   function talkNpc(n) {
@@ -1380,6 +1513,15 @@
 
     if (n.id === "barista") {
       if (coffeeFixed) {
+        // Bernie Beans toy: free drip once/day after cart fixed
+        if (selected && selected.id === "bernie" && beansCoffeeDay !== dayIndex) {
+          beansCoffeeDay = dayIndex;
+          addAxes({ street: 1 });
+          say("On the house for fairness crusaders. Don't tell management.");
+          toast("Free drip! +1 Street. Beans smiles once.");
+          sfx("ok");
+          return;
+        }
         say(n.lines.done);
         addCoins(1);
         bumpFavor("wine", 1); // second ping after fix — still have to visit park
@@ -1512,6 +1654,29 @@
     }
 
     if (n.id === "boothie") {
+      // Texture: first talk of the day = photo op; further talks = spectacle grind
+      if (photoDay !== dayIndex) {
+        photoDay = dayIndex;
+        addCoins(2);
+        addAxes({ heat: 1 });
+        addRep(1);
+        burst(n.x, n.y, "#fff0a0", 18);
+        banner("PHOTO OP", "#ffb347", 1.4);
+        say("Smile! Free buttons if you pose with the cardboard candidate. Flash!");
+        toast("Photo op! +2¢, +1 Heat. The intern tags you unironically.");
+        pushLog("Booth photo op — Heat +1, coins +2.");
+        bumpFavor("chaos", 1);
+        // Bootstraps toy: clarify prior statement at booth
+        if (selected && selected.id === "donny") {
+          bumpFavor("donors", 1);
+          if (voters.includes("wine")) {
+            voterLoyalty.wine = Math.max(12, (voterLoyalty.wine || 50) - 6);
+            toast("Pivot clip drops. Donors warm; Wine Moms side-eye.");
+          }
+        }
+        sfx("ok");
+        return;
+      }
       addRep(selected.id === "tiny" ? 1 : 2);
       addCoins(2);
       addAxes({ heat: 1 });
@@ -1526,6 +1691,8 @@
         buttons++;
         bumpObj("buttons", 1);
       }
+      // Rally mic-chain progress
+      noteMicChainTalk();
       return;
     }
 
@@ -1535,6 +1702,11 @@
       if ((axes.heat || 0) < 25) bumpFavor("lawn", 1);
       else toast("Lawn Guardians side-eye your Heat. Cool off before park rounds count.");
       say(n.lines.wine || n.lines.default);
+      // Spat recon available at park
+      if (spatCount > 0 && reconDay !== dayIndex) {
+        toast("Tip: E again or pay 8¢ here to cool a spat (reconciliation).");
+      }
+      noteMicChainTalk();
       return;
     }
 
@@ -1697,7 +1869,19 @@
       const rule = getBoardRule();
       toast(`DAY ${dayIndex}: ${c.title} · RULE: ${rule.title}`);
       pushLog(`Board: ${c.title} / ${rule.title}.`);
+      if (dayHeadline) toast("📰 " + dayHeadline);
       toast(rule.blurb);
+      // Mandate toy: Q not needed — stamp form with City Order near board, or E stamp if mayor
+      if (selected && selected.id === "mayor" && !seedFlags.mandateStamp) {
+        seedFlags.mandateStamp = true;
+        if (coins >= 2) {
+          coins -= 2;
+          floatText(player.x, player.y - 18, "-2¢ fee", "#ff8080");
+        }
+        bumpFavor("policy", 1);
+        toast("City stamp applied. Policy Nerds notice the triplicate.");
+        pushLog("Mandate stamped a form at the board.");
+      }
       if (!hasPermit && !permitDelivered) {
         toast("Sticky note: Permit near MAILBOX.");
       }
@@ -1765,6 +1949,16 @@
     }
 
     if (z.id === "mailbox") {
+      // Rocket toy: crash-landing into mailbox
+      if (selected && selected.id === "leon" && launchT > 0 && !seedFlags.rocketMail) {
+        seedFlags.rocketMail = true;
+        addAxes({ heat: 2 });
+        addCoins(2);
+        burst(player.x, player.y, "#60c8e8", 16);
+        toast("Rocket-mailbox collision! Cameras love it. +2 Heat, +2¢.");
+        pushLog("Leon crashed into the mailbox. Heat +2.");
+        sfx("sting");
+      }
       if (seedFlags.permitAtMail && !hasPermit && !permitDelivered) {
         seedFlags.permitAtMail = false;
         hasPermit = true;
@@ -1866,7 +2060,32 @@
     }
 
     if (z.id === "park") {
+      // Reconciliation: park + 8¢ cools a spat (texture pack fairness valve)
+      if (spatCount > 0 && reconDay !== dayIndex && coins >= 8) {
+        if (trySpatReconciliation(true)) return;
+      }
       talkNpc(NPCS.find((n) => n.id === "parkgoer"));
+      return;
+    }
+
+    if (z.id === "plaza") {
+      // Tiny toy: fountain crawl once/day
+      if (selected && selected.id === "tiny" && fountainToyDay !== dayIndex) {
+        fountainToyDay = dayIndex;
+        addCoins(3);
+        bumpFavor("conspiracy", 1);
+        burst(player.x, player.y, "#ff8c28", 12);
+        toast("Fountain crawl! +3¢ and a damp rumor.");
+        pushLog("Tiny fountain crawl — conspiracy favor + coins.");
+        sfx("ok");
+        return;
+      }
+      toast("Fountain Plaza. Toss a coin (2¢) for luck?");
+      if (coins >= 2 && Math.random() < 0.5) {
+        coins -= 2;
+        addRep(3);
+        toast("Wish accepted. The fountain gurgles approvingly.");
+      }
       return;
     }
 
@@ -1896,16 +2115,6 @@
         burst(player.x, player.y, "#ff8c28", 10);
       } else {
         toast("Too tight. Tiny Orange Man's Squeeze (or a tool upgrade) needed.");
-      }
-      return;
-    }
-
-    if (z.id === "plaza") {
-      toast("Fountain Plaza. Toss a coin (2¢) for luck?");
-      if (coins >= 2 && Math.random() < 0.5) {
-        coins -= 2;
-        addRep(3);
-        toast("Wish accepted. The fountain gurgles approvingly.");
       }
       return;
     }
@@ -1984,6 +2193,8 @@
     if (coal && coal.id === "grassroots") p += 1;
     if (coal && coal.id === "money") p = Math.max(2, p - 1);
     if (voters.includes("donors")) p = Math.max(2, p - 1);
+    // Texture: one-day coalition form perk
+    if (coalPerkDay === dayIndex) p = Math.max(2, p - 1);
     return p;
   }
 
@@ -2082,6 +2293,19 @@
       }
       if (orderUsed && powerRank >= 2 && orderMode) {
         // second use only if first was used and rank high — track with orderUsed as count
+      }
+      const board = getZone("board");
+      // Mandate toy: stamp near board
+      if (board && inZone(player.x, player.y, board, 40) && !seedFlags.mandateQStamp) {
+        seedFlags.mandateQStamp = true;
+        orderUsed = true;
+        if (coins >= 2) coins -= 2;
+        bumpFavor("policy", 1);
+        toast("City Order: Form stamped at Board. Policy Nerds stir.");
+        pushLog("Mandate Q-stamp at board.");
+        addAxes({ street: 1, donor: 1 });
+        sfx("ok");
+        return;
       }
       const locked = getZone("locked") || getZone("unlocked");
       if (locked && locked.id === "locked" && inZone(player.x, player.y, locked, 30)) {
@@ -2311,6 +2535,21 @@
         debateWon,
         electionNight: true,
         codexCount: Object.keys(codexSeen).length,
+        // Texture pack: shareable run summary
+        summary: {
+          headline: dayHeadline,
+          recruits: voters.length,
+          steals: rivalStealsWeek,
+          coleMemos: consultantPaid,
+          petePays: potholePaid,
+          pigeons: pigeonDoneWeek,
+          spatCount,
+          rivalPressure,
+          coalition: coalitionLabel(),
+          ending: outcome && outcome.title,
+          character: selected.name,
+          charId: selected.id,
+        },
       };
       // 1.1 soft NG+: bank a small start bonus if week was strong
       const score = (axes.street || 0) + (axes.donor || 0) + voters.length * 3 + (debateWon ? 5 : 0);
@@ -3010,6 +3249,14 @@
       ctx.font = font(9, "bold");
       ctx.fillText("EVE", calStart + MAX_DAYS * (calW + 4) + 18, calY + 13);
     }
+    // Texture: morning headline ticker under calendar
+    if (dayHeadline) {
+      ctx.fillStyle = "rgba(255,200,120,0.75)";
+      ctx.font = font(10);
+      ctx.textAlign = "center";
+      const scroll = (animT * 28) % (dayHeadline.length * 7 + 200);
+      fitText("📰 " + dayHeadline, W / 2 - scroll * 0.15 + 40, calY + 32, W - 80, "center");
+    }
 
     if (!selected) return;
 
@@ -3532,6 +3779,8 @@
       "If few blocs remain, the daily target shrinks automatically.",
       "Blocs need FAVOR from annoying errands — chat alone won't convert them.",
       "Failed pitches after favor can cost a favor point. Grind again.",
+      "Park + 8¢ cools a spat. Pigeons ×3 whisper. Booth photo once/day.",
+      "Coalition form day: cheaper buttons + recruit tip. Headlines are flavor.",
     ];
     lines.forEach((line, i) => {
       ctx.fillText("· " + line, W / 2 - 270, 120 + i * 26);
@@ -3901,11 +4150,13 @@
 
     const r = results;
     if (!r) return;
+    const s = r.summary || {};
+    const isNight = !!r.electionNight;
 
     ctx.fillStyle = "#ffb347";
     ctx.font = "bold 26px Segoe UI,sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("End of Day — Pocket Republic", W / 2, 42);
+    ctx.fillText(isNight ? "Election Night — Run Summary" : "End of Day — Pocket Republic", W / 2, 42);
 
     ctx.fillStyle = "#fff";
     ctx.font = "bold 22px Segoe UI,sans-serif";
@@ -3938,60 +4189,66 @@
       fitText(String(c.val), x + cardW / 2, 200, cardW - 16, "center");
     });
 
-    // objectives
-    ctx.textAlign = "left";
-    ctx.fillStyle = "#ffb347";
-    ctx.font = "bold 14px Segoe UI,sans-serif";
-    ctx.fillText("Objectives", 80, 270);
-    r.objectives.forEach((o, i) => {
-      ctx.fillStyle = o.done ? "#6d6" : "#e88";
+    if (isNight && s) {
+      // Shareable texture summary card
+      ctx.fillStyle = "rgba(30,20,50,0.95)";
+      drawRounded(80, 240, W - 160, 200, 12);
+      ctx.fill();
+      ctx.strokeStyle = "#ff9a3c";
+      ctx.lineWidth = 2;
+      drawRounded(80, 240, W - 160, 200, 12);
+      ctx.stroke();
+      ctx.fillStyle = "#ffb347";
+      ctx.font = "bold 15px Segoe UI,sans-serif";
+      ctx.textAlign = "left";
+      ctx.fillText("Week Card", 100, 268);
+      ctx.fillStyle = "#e8d8f0";
       ctx.font = "13px Segoe UI,sans-serif";
-      fitText(`${o.done ? "✓" : "✗"} ${o.label}`, 80, 295 + i * 22, 400, "left");
-    });
-
-    // voters
-    ctx.fillStyle = "#ffb347";
-    ctx.font = "bold 14px Segoe UI,sans-serif";
-    ctx.fillText("Voter Coalition", 520, 270);
-    if (!r.voters.length) {
-      ctx.fillStyle = "#888";
-      ctx.font = "13px Segoe UI,sans-serif";
-      ctx.fillText("No groups recruited", 520, 295);
+      const lines = [
+        `${s.character || r.character} · ${s.ending || (r.outcome && r.outcome.title) || "—"}`,
+        `Bloc: ${s.coalition || r.coalition} · Voters: ${s.recruits != null ? s.recruits : (r.voters || []).length}/12 · Codex ${r.codexCount || 0}`,
+        `Rival steals: ${s.steals | 0} · Spats: ${s.spatCount | 0} · Pressure: ${s.rivalPressure | 0}/8`,
+        `Grift: Pete×${s.petePays | 0} · Cole memos×${s.coleMemos | 0} · Pigeons: ${s.pigeons ? "yes" : "no"}`,
+        s.headline ? `📰 ${s.headline}` : "📰 (no headline logged)",
+      ];
+      lines.forEach((line, i) => fitText(line, 100, 298 + i * 24, W - 200, "left"));
+      ctx.fillStyle = "#8878a8";
+      ctx.font = "11px Cascadia Mono,monospace";
+      ctx.fillText(BUILD_ID + " · screenshot this card · fictional archetypes only", 100, 420);
     } else {
-      r.voters.forEach((id, i) => {
-        const g = VOTER_GROUPS.find((v) => v.id === id);
-        if (!g) return;
-        ctx.fillStyle = g.color;
-        ctx.font = "13px Segoe UI,sans-serif";
-        fitText(`${g.icon} ${g.name}  · loyalty ${r.loyalty[id] || 0}`, 520, 295 + i * 22, 360, "left");
-      });
-    }
-
-    ctx.fillStyle = r.upgraded ? "#80e0ff" : "#888";
-    ctx.font = "13px Segoe UI,sans-serif";
-    ctx.fillText(r.upgraded ? "✓ Tool upgraded" : "○ No tool upgrade", 520, 420);
-    if (r.electionNight) {
+      // Day results (non-election)
+      ctx.textAlign = "left";
       ctx.fillStyle = "#ffb347";
       ctx.font = "bold 14px Segoe UI,sans-serif";
-      ctx.fillText("ELECTION NIGHT · " + BUILD_ID, 520, 430);
-    }
-    if (r.days) {
-      ctx.fillStyle = "#c8b8d8";
-      ctx.font = "13px Segoe UI,sans-serif";
-      ctx.fillText(`Week: ${r.days} days · Codex ${r.codexCount || 0}/12`, 520, 450);
-    }
-    if (r.outcome && r.outcome.id) {
-      ctx.fillStyle = "#a0d0ff";
-      ctx.fillText(`Ending ${r.outcome.id}`, 520, 470);
+      ctx.fillText("Objectives", 80, 270);
+      (r.objectives || []).forEach((o, i) => {
+        ctx.fillStyle = o.done ? "#6d6" : "#e88";
+        ctx.font = "13px Segoe UI,sans-serif";
+        fitText(`${o.done ? "✓" : "✗"} ${o.label}`, 80, 295 + i * 22, 400, "left");
+      });
+      ctx.fillStyle = "#ffb347";
+      ctx.font = "bold 14px Segoe UI,sans-serif";
+      ctx.fillText("Voter Coalition", 520, 270);
+      if (!r.voters.length) {
+        ctx.fillStyle = "#888";
+        ctx.fillText("No groups recruited", 520, 295);
+      } else {
+        r.voters.forEach((id, i) => {
+          const g = VOTER_GROUPS.find((v) => v.id === id);
+          if (!g) return;
+          ctx.fillStyle = g.color;
+          fitText(`${g.icon} ${g.name}  · loyalty ${r.loyalty[id] || 0}`, 520, 295 + i * 22, 360, "left");
+        });
+      }
     }
 
     ctx.fillStyle = "rgba(255,140,40,0.9)";
-    drawRounded(W / 2 - 130, 480, 260, 44, 12);
+    drawRounded(W / 2 - 130, 460, 260, 44, 12);
     ctx.fill();
     ctx.fillStyle = "#1a1020";
     ctx.font = "bold 16px Segoe UI,sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("Title Screen (Enter)", W / 2, 508);
+    ctx.fillText("Title Screen (Enter)", W / 2, 488);
     ctx.fillStyle = "#6a5a88";
     ctx.font = "11px Cascadia Mono,monospace";
     const achN = Object.keys(achievements).length;
@@ -4588,6 +4845,11 @@
       getFavor(id) {
         return favorOf(id);
       },
+      getHeadline() {
+        return dayHeadline;
+      },
+      trySpatReconciliation,
+      maybeCoalitionFanfare,
       setDay(n) {
         dayIndex = clamp(n, 1, MAX_DAYS);
       },
