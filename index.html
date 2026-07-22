@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="theme-color" content="#1a0f2e">
+  <title>Orange Day: Pocket Republic</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header class="brand">
+      <h1>Orange Day: <span>Pocket Republic</span></h1>
+      <p class="tag">A cozy satirical civic life-sim · Full election week · v1.3</p>
+    </header>
+    <div class="stage">
+      <canvas id="game" width="960" height="540" aria-label="Orange Day: Pocket Republic"></canvas>
+      <div id="touch" class="touch" aria-hidden="true">
+        <div class="pad move" data-pad="move"><span class="tag">MOVE</span><div class="knob"></div></div>
+        <button type="button" class="act" data-act="interact">E</button>
+        <button type="button" class="act power" data-act="power">PWR</button>
+      </div>
+    </div>
+    <p class="hint">
+      <kbd>WASD</kbd> move · <kbd>E</kbd> talk · <kbd>Q</kbd> power · <kbd>Tab</kbd> objectives ·
+      <kbd>C</kbd> codex · <kbd>G</kbd> gallery · <kbd>H</kbd> glossary · <kbd>O</kbd> options ·
+      <kbd>Esc</kbd> pause · gamepad · <strong>7-day</strong> week · save slots 1–3 · <strong>v1.3</strong> · <kbd>I</kbd> credits
+    </p>
+  </main>
+  <script src="data.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
