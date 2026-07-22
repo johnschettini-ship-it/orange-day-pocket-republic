@@ -24,7 +24,7 @@ Use this for a **human full-week** pass. Headless `node smoke.js` already covers
 | D3 | Board shows crisis + civic rule | |
 
 ## Full week (one character)
-Pick any character; prefer **Tiny** first, then one of **Rally Queen / Donny**.
+Pick any character; prefer **Tiny** first, then one of **Rally Queen / Buck**.
 
 | Day | Gate / beat | Pass? | Notes |
 |-----|-------------|-------|-------|

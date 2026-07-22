@@ -1744,15 +1744,15 @@
 
     if (pk === "brand") {
       if (brandT > 0) {
-        toast("Everything is already gold-ish.");
+        toast("You just pivoted. Let this stance breathe a second.");
         return;
       }
       brandT = 6 + powerRank;
       addCoins(6 + powerRank * 3);
       addAxes({ donor: 2 + powerRank, heat: 1 + (powerRank > 1 ? 1 : 0), street: -1 });
       burst(player.x, player.y, "#e8c040", 20);
-      banner("BRANDING", "#e8c040", 1.5);
-      toast("Branding! Props go gold; Heat ticks up.");
+      banner("PIVOT", "#e8c040", 1.5);
+      toast("Pivot! Donors swoon; Heat ticks up.");
       if (!voters.includes("donors") && Math.random() < 0.4) tryRecruit("donors");
       if (!voters.includes("patriots") && Math.random() < 0.3) tryRecruit("patriots", selected.id === "donny");
       if (!voters.includes("chaos") && Math.random() < 0.25) tryRecruit("chaos");

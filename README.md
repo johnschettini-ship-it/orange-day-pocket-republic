@@ -50,7 +50,7 @@ Touch: virtual stick + E / PWR buttons on coarse pointers. Gamepad: stick · A i
 |---------|----------|
 | Week | Full **7-day** election week → Election Night |
 | Districts | Plaza · Media Alley · Campus Green · Donor Heights |
-| Characters | **6** playable (Tiny, Rally Queen, Mayor Mandate, Bernie Beans, Leon Rocket, Donny Goldtower) |
+| Characters | **6** playable (Tiny, Rally Queen, Mayor Mandate, Bernie Beans, Leon Rocket, Buck Bootstraps) |
 | Voters | **12** blocs · codex · rival spats · coalitions |
 | Systems | Axes (Street/Donor/Heat), crises, board rules, setpieces, powers, NG+, achievements |
 | UX | Day-1 tips · glossary · achievement gallery · **3 save slots** · best-ending memory |
@@ -71,7 +71,7 @@ Touch: virtual stick + E / PWR buttons on coarse pointers. Gamepad: stick · A i
 3. **Mayor Mandate** — City Order (**local mayor only** — not a presidential run)  
 4. **Bernie Beans** — Solidarity / labor focus  
 5. **Leon Rocket** — Gadgets (**tech inventor** — not presidential)  
-6. **Donny Goldtower** — Money theater / donor access  
+6. **Buck Bootstraps** — Bootstraps-memoir convert / donor pivots (**archetype only** — not a real person)  
 
 ### Voter groups (12)
 
