@@ -128,7 +128,7 @@
   let showOptions = false;
   let showCredits = false;
   const BUILD_ID = "v1.3";
-  const DRAFT_LABEL = "Full Week Ship";
+  const DRAFT_LABEL = "Election Season";
   let ngPlusBonus = 0; // soft NG+ coins from last strong week
   const SETTINGS_KEY = "orangeDay_settings_v1";
   const ACHIEVE_KEY = "orangeDay_achieve_v1";
@@ -561,7 +561,8 @@
     const crisis = getCrisis();
     const rule = getBoardRule();
     const unlockedToday = DISTRICTS.filter((d) => d.id !== "plaza" && d.unlockDay === dayIndex).map((d) => d.name);
-    let morning = `Day ${dayIndex}/${MAX_DAYS}: ${crisis.title} · Rule: ${rule.title}`;
+    // Don't spoiler total week length in the morning blurb — just "today"
+    let morning = `Day ${dayIndex}: ${crisis.title} · Rule: ${rule.title}`;
     if (unlockedToday.length) morning += ` · Opens: ${unlockedToday.join(", ")}`;
     msg = morning + (dayHeadline ? "  ·  📰 " + dayHeadline : "");
     msgT = unlockedToday.length ? 5.8 : 5.0;
@@ -3229,17 +3230,18 @@
     ctx.fillStyle = "rgba(255,140,40,0.35)";
     ctx.fillRect(0, barH - 2, W, 2);
 
-    // Calendar strip (D3) — days 1..7
+    // Calendar: only past + today (no full-week spoiler strip of empty future days)
     const calY = barH + 4;
     const calW = 28;
-    const calStart = W / 2 - (MAX_DAYS * (calW + 4)) / 2;
-    for (let d = 1; d <= MAX_DAYS; d++) {
+    const shown = dayIndex; // reveal length by living it
+    const calStart = W / 2 - (shown * (calW + 4)) / 2;
+    for (let d = 1; d <= shown; d++) {
       const x = calStart + (d - 1) * (calW + 4);
       const cur = d === dayIndex;
-      ctx.fillStyle = cur ? "rgba(255,140,40,0.85)" : d < dayIndex ? "rgba(80,120,90,0.7)" : "rgba(40,30,55,0.75)";
+      ctx.fillStyle = cur ? "rgba(255,140,40,0.85)" : "rgba(80,120,90,0.7)";
       drawRounded(x, calY, calW, 18, 4);
       ctx.fill();
-      ctx.fillStyle = cur ? "#1a1020" : "#ddd";
+      ctx.fillStyle = cur ? "#1a1020" : "#c8d8c8";
       ctx.font = font(10, "bold");
       ctx.textAlign = "center";
       ctx.fillText(String(d), x + calW / 2, calY + 13);
@@ -3247,7 +3249,7 @@
     if (dayIndex >= MAX_DAYS) {
       ctx.fillStyle = "#ffb347";
       ctx.font = font(9, "bold");
-      ctx.fillText("EVE", calStart + MAX_DAYS * (calW + 4) + 18, calY + 13);
+      ctx.fillText("EVE", calStart + shown * (calW + 4) + 8, calY + 13);
     }
     // Texture: morning headline ticker under calendar
     if (dayHeadline) {
@@ -3300,7 +3302,8 @@
     ctx.fillStyle = "#ffd090";
     ctx.font = "bold 12px Cascadia Mono,monospace";
     ctx.textAlign = "center";
-    ctx.fillText(`D${dayIndex}/${MAX_DAYS}`, 294, 30);
+    // Current day only — no "/7" spoiler on the HUD chip
+    ctx.fillText(`D${dayIndex}`, 294, 30);
 
     // day meter
     ctx.fillStyle = "#443058";
@@ -3586,7 +3589,7 @@
 
     ctx.fillStyle = "#c8b8d8";
     ctx.font = "13px Segoe UI,sans-serif";
-    ctx.fillText("Cozy satirical civic life-sim · Election week " + BUILD_ID, W / 2, 400);
+    ctx.fillText("Cozy satirical civic life-sim · " + BUILD_ID, W / 2, 400);
     ctx.fillStyle = "#9080a8";
     ctx.font = "11px Cascadia Mono,monospace";
     ctx.fillText("Fictional parody archetypes · No real names or likenesses", W / 2, 420);
@@ -3647,7 +3650,7 @@
       ctx.fillText("Press Enter / Click", W / 2, 470);
       ctx.fillStyle = "#7a6a98";
       ctx.font = "12px Segoe UI,sans-serif";
-      ctx.fillText("7-day week · WASD · E · Q · O options · gamepad", W / 2, 508);
+      ctx.fillText("WASD · E · Q · O options · gamepad", W / 2, 508);
       ctx.fillStyle = "#6a5a88";
       ctx.font = "10px Cascadia Mono,monospace";
       ctx.fillText(BUILD_ID, W / 2, 528);
@@ -3840,7 +3843,7 @@
     ctx.fillStyle = "#ffb347";
     ctx.font = "bold 28px Segoe UI,sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText(`Evening Report — Day ${e.day}/${MAX_DAYS}`, W / 2, 48);
+    ctx.fillText(`Evening Report — Day ${e.day}`, W / 2, 48);
 
     ctx.fillStyle = "#c8b8d8";
     ctx.font = "14px Segoe UI,sans-serif";
@@ -4004,7 +4007,7 @@
     ctx.fillText("Choose your civic avatar", W / 2, 40);
     ctx.fillStyle = "#a090b8";
     ctx.font = "12px Segoe UI,sans-serif";
-    ctx.fillText("← → select · Enter/click · 6 avatars · full election week", W / 2, 62);
+    ctx.fillText("← → select · Enter/click · pick your civic avatar", W / 2, 62);
 
     const cols = 3;
     const cardW = 280;
@@ -4141,7 +4144,7 @@
     ctx.textAlign = "center";
     ctx.fillStyle = "#8a7898";
     ctx.font = font(11);
-    ctx.fillText("Sleep at HOME · 7-day week · " + BUILD_ID, W / 2, panelY + panelH - 14);
+    ctx.fillText("Sleep at HOME · election season · " + BUILD_ID, W / 2, panelY + panelH - 14);
   }
 
   function drawResults() {
@@ -4563,7 +4566,7 @@
           charIdx = i;
           resetRun(CHARACTERS[charIdx]);
           state = "play";
-          toast(`You wake as ${selected.name}. Day ${dayIndex}/7 — check the Town Board.`);
+          toast(`You wake as ${selected.name}. Check the Town Board.`);
         }
       });
       return true;
