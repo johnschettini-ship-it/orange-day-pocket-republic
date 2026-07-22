@@ -306,6 +306,8 @@
   let redistribT = 0;
   let launchT = 0;
   let brandT = 0;
+  let potholePaid = 0; // Paver Pete's grift counter
+  let boeDay = 0, adDay = 0; // once-per-day "microtransaction" gags
   let currentDistrict = "plaza";
   let setpieces = { debate: false, scandal: false, march: false, gala: false };
   let scandals = []; // scrapbook strings
@@ -424,6 +426,9 @@
     redistribT = 0;
     launchT = 0;
     brandT = 0;
+    potholePaid = 0;
+    boeDay = 0;
+    adDay = 0;
     currentDistrict = "plaza";
     setpieces = { debate: false, scandal: false, march: false, gala: false };
     scandals = [];
@@ -550,6 +555,9 @@
       reduceFlash,
       dayLengthMode,
       ngPlusBonus,
+      potholePaid,
+      boeDay,
+      adDay,
     };
   }
 
@@ -623,6 +631,9 @@
       reduceFlash = !!data.reduceFlash;
       if (data.dayLengthMode && DAY_LENGTHS[data.dayLengthMode]) dayLengthMode = data.dayLengthMode;
       if (typeof data.ngPlusBonus === "number") ngPlusBonus = data.ngPlusBonus;
+      potholePaid = data.potholePaid | 0;
+      boeDay = data.boeDay | 0;
+      adDay = data.adDay | 0;
 
       if (data.midDay) {
         beginDay(false);
@@ -1141,6 +1152,28 @@
       return;
     }
 
+    if (n.id === "paver") {
+      if (coins < 10) {
+        say(n.lines.broke);
+        sfx("warn");
+        return;
+      }
+      coins -= 10;
+      potholePaid++;
+      floatText(player.x, player.y - 20, "-10¢", "#ff8080");
+      if (potholePaid <= 3) {
+        say(potholePaid === 1 ? n.lines.default : n.lines.excuses[(potholePaid - 2) % n.lines.excuses.length]);
+        pushLog(`Paid Paver Pete 10¢ for pothole repair (total: ${potholePaid * 10}¢). Potholes: unchanged.`);
+      } else {
+        say(n.lines.exposed);
+        addAxes({ street: -1 });
+        pushLog("Paver Pete's potholes remain load-bearing. Conspiracy Cafe nods knowingly.");
+        if (!voters.includes("conspiracy") && Math.random() < 0.6) tryRecruit("conspiracy");
+      }
+      sfx("blip");
+      return;
+    }
+
     if (n.id === "mover") {
       if (crateMoved) {
         say(n.lines.done);
@@ -1471,6 +1504,51 @@
 
     if (z.id === "booth") {
       talkNpc(NPCS.find((n) => n.id === "boothie"));
+      return;
+    }
+
+    if (z.id === "boelunch") {
+      if (boeDay === dayIndex) {
+        toast("The Board of Education is still expensing dessert. One lunch per day.");
+        return;
+      }
+      if (coins < 12) {
+        toast("Board of Ed lunch: $2.99 REAL MONEY* (*12¢ petty cash). You have neither.");
+        sfx("warn");
+        return;
+      }
+      coins -= 12;
+      boeDay = dayIndex;
+      addAxes({ donor: 1 });
+      floatText(player.x, player.y - 20, "-12¢", "#ff8080");
+      toast("MICROTRANSACTION: Board of Ed lunch — $2.99 REAL MONEY... card declined (campaign finance law). 12¢ petty cash it is.");
+      pushLog("Took the Board of Education to lunch. They ordered the salmon. Policy discussed: none.");
+      burst(player.x, player.y, "#d0c060", 12);
+      if (!voters.includes("policy") && Math.random() < 0.6) tryRecruit("policy", selected.id === "mayor" || selected.id === "donny");
+      sfx("ok");
+      return;
+    }
+
+    if (z.id === "addesk") {
+      if (adDay === dayIndex) {
+        toast("Your ad is already running between two weather reports. One buy per day.");
+        return;
+      }
+      if (coins < 20) {
+        toast("30s of ad time: $4.99 REAL MONEY* (*20¢ petty cash). Come back richer.");
+        sfx("warn");
+        return;
+      }
+      coins -= 20;
+      adDay = dayIndex;
+      addAxes({ donor: 2, heat: 1 });
+      floatText(player.x, player.y - 20, "-20¢", "#ff8080");
+      toast("MICROTRANSACTION: 30s ad buy — $4.99 REAL MONEY... payment processor laughed. 20¢ petty cash. Your ad airs at 3am.");
+      pushLog("Bought 30 seconds of ad time. The jingle is already stuck in four demographics.");
+      burst(player.x, player.y, "#e080c0", 14);
+      if (!voters.includes("moderates") && Math.random() < 0.5) tryRecruit("moderates");
+      if (!voters.includes("patriots") && Math.random() < 0.35) tryRecruit("patriots");
+      sfx("ok");
       return;
     }
 

@@ -357,6 +357,7 @@ const ZONES = [
   { id: "tunnel", name: "Hidden Tunnel", x: 90, y: 420, w: 80, h: 50, color: "#1a2830", label: "TUNNEL", district: "plaza" },
   { id: "plaza", name: "Fountain Plaza", x: 380, y: 420, w: 200, h: 140, color: "#5a8aaa", label: "PLAZA", district: "plaza" },
   { id: "crate", name: "Oversized Crate", x: 250, y: 400, w: 90, h: 70, color: "#8a6a40", label: "CRATE", district: "plaza" },
+  { id: "boelunch", name: "Board of Ed Lunch Table", x: 380, y: 190, w: 90, h: 50, color: "#7a6a30", label: "LUNCH", district: "plaza" },
   // gates from plaza
   { id: "gate_media", name: "Gate → Media", x: 1000, y: 300, w: 70, h: 80, color: "#6a3080", label: "→MEDIA", district: "plaza", transit: "media" },
   { id: "gate_campus", name: "Gate → Campus", x: 480, y: 620, w: 90, h: 60, color: "#308050", label: "→CAMPUS", district: "plaza", transit: "campus" },
@@ -364,6 +365,7 @@ const ZONES = [
   { id: "studio", name: "Spin Studio", x: 1280, y: 120, w: 140, h: 100, color: "#7a40a0", label: "STUDIO", district: "media" },
   { id: "cameras", name: "Camera Nest", x: 1480, y: 200, w: 110, h: 90, color: "#5a3070", label: "CAMS", district: "media" },
   { id: "leakdesk", name: "Leak Desk", x: 1350, y: 360, w: 120, h: 80, color: "#904060", label: "LEAK", district: "media" },
+  { id: "addesk", name: "Ad Sales Desk", x: 1550, y: 360, w: 110, h: 80, color: "#a05880", label: "AD $", district: "media" },
   { id: "gate_plaza_m", name: "Gate → Plaza", x: 1120, y: 300, w: 70, h: 80, color: "#c4783a", label: "→PLAZA", district: "media", transit: "plaza" },
   { id: "gate_donor_m", name: "Gate → Donors", x: 1680, y: 180, w: 70, h: 70, color: "#c0a030", label: "→DONOR", district: "media", transit: "donor" },
   // —— Campus Green (south) ——
@@ -453,6 +455,20 @@ const NPCS = [
     lines: {
       default: "INSERT COINS · DISPENSE BUTTONS · NO REFUNDS",
       buy: "Clunk. A shiny campaign button appears. Artisanal.",
+    },
+  },
+  {
+    id: "paver",
+    name: "Paver Pete",
+    x: 740,
+    y: 430,
+    color: "#8a8a95",
+    home: "plaza",
+    lines: {
+      default: "These potholes? Criminal. 10¢ and my guys get right on it.",
+      broke: "No coins, no asphalt dreams. Come back with 10¢.",
+      excuses: ["Supply chain. Nothing moves.", "Permit's pending. Any decade now.", "My asphalt guy's cousin has the truck.", "We did a study. The study needs a study."],
+      exposed: "Look, the potholes are a JOURNEY, not a destination.",
     },
   },
   {
