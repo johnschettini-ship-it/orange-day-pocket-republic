@@ -2698,11 +2698,13 @@
     ctx.fillStyle = dist ? dist.color : "#aaa";
     fitText(dist ? dist.name : "Plaza", 52, 46, 120, "left");
 
-    // stats
-    ctx.textAlign = "left";
+    // stats — right-aligned against the day chip so it never collides with
+    // the axes column to its left, regardless of digit count (coins is
+    // uncapped; axes are clamped 0-100 so their column width is bounded).
+    ctx.textAlign = "right";
     ctx.font = "bold 14px Cascadia Mono,monospace";
     ctx.fillStyle = "#ffd060";
-    ctx.fillText(`${coins}¢`, 200, 24);
+    ctx.fillText(`${coins}¢`, 262, 24);
     // axes (Phase B)
     ctx.font = "bold 10px Cascadia Mono,monospace";
     ctx.textAlign = "left";
