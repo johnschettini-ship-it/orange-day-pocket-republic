@@ -153,6 +153,9 @@
     unlockedChars: { tiny: true },
     charsPlayed: {},
     weeksNoSteal: 0,
+    debatesWon: 0, // account: plaza debate wins (unlock path)
+    permits: 0, // account: clean permit deliveries
+    marches: 0, // account: union marches joined
     easter: { pigeon: false, boardReads: 0, gala: false, photos: 0 },
   };
 
@@ -367,6 +370,8 @@
   let lateNights = 0;
   let msg = "";
   let msgT = 0;
+  let toastQueue = []; // sequential toasts — no more clobbering mid-errand
+  let pendingBurst = null; // defer anger burst until dialogue ends
   let log = [];
   let objProg = {};
   let voters = []; // recruited group ids
@@ -498,6 +503,8 @@
     spatCount = 0;
     anger = 0;
     dialogue = null;
+    pendingBurst = null;
+    toastQueue = [];
     karenDay = 0;
     drunkDay = 0;
     catLadyDay = 0;
@@ -919,6 +926,7 @@
     queueTip("codex", "C = voter codex · G = achievements · H = glossary · O = options.");
     queueTip("slots", "Title screen: keys 1/2/3 pick a save slot before Continue.");
     queueTip("favor", "Voters need ERRANDS (favor), not small talk. Check codex hints.");
+    queueTip("composure", "💢 Composure: Karen, Doug & Clara raise it. Park bench or coffee cools it — bursting scatters ¢.");
     queueTip("texture", "Peck pigeons · booth photo · park can cool spats for 8¢.");
   }
 
@@ -943,9 +951,41 @@
   function nearPoint(px, py, x, y, r = INTERACT_R) {
     return dist(px, py, x, y) < r;
   }
-  function toast(t, sec = 3) {
-    msg = t;
-    msgT = sec;
+  /**
+   * Queue toasts so mid-errand pings don't wipe achievements / monologue lines.
+   * opts.now = show immediately (dialogue lines); still preserves queued rest.
+   */
+  function toast(t, sec = 3, opts) {
+    if (!t) return;
+    const s = sec == null ? 3 : sec;
+    if (opts && opts.now) {
+      msg = t;
+      msgT = s;
+      return;
+    }
+    // Free slot — show now
+    if (msgT <= 0.12 || !msg) {
+      msg = t;
+      msgT = s;
+      return;
+    }
+    // Dedup current + tail of queue
+    if (msg === t) return;
+    const tail = toastQueue.length ? toastQueue[toastQueue.length - 1] : null;
+    if (tail && tail.t === t) return;
+    if (toastQueue.length >= 6) toastQueue.shift();
+    toastQueue.push({ t, sec: s });
+  }
+
+  function drainToastQueue() {
+    if (msgT > 0 && msg) return;
+    if (!toastQueue.length) {
+      if (msgT <= 0) msg = "";
+      return;
+    }
+    const next = toastQueue.shift();
+    msg = next.t;
+    msgT = next.sec;
   }
   function balloon(x, y, text, sec = 2.4) {
     // Keep bubbles short so they don't cover half the plaza
@@ -1010,24 +1050,40 @@
       floatText(player.x + 18, player.y - 48, (n > 0 ? "+" : "") + n + " 💢", n > 0 ? "#e06060" : "#80e0a0");
     }
     if (prev < 100 && anger >= 100) {
-      burstAnger(reason);
+      // Never steal mid-monologue — fire after Clara (etc.) finishes
+      if (dialogue) {
+        pendingBurst = reason || "tension";
+      } else {
+        burstAnger(reason);
+      }
     }
   }
 
   function calmAnger(n, reason) {
     if (!n) return;
     anger = clamp((anger || 0) - Math.abs(n), 0, 100);
+    if (anger < 100) pendingBurst = null;
     if (player) floatText(player.x - 18, player.y - 48, "−" + Math.abs(n) + " 💢", "#80e0a0");
   }
 
   function burstAnger(reason) {
-    anger = 32;
-    const lost = Math.min(coins, 8 + Math.floor(Math.random() * 6));
+    pendingBurst = null;
+    anger = 28;
+    // Coin floor: never wipe you below ~5¢ (day-1 especially brutal otherwise)
+    const maxSteal = Math.max(0, coins - 5);
+    const want = 6 + Math.floor(Math.random() * 5); // 6–10
+    const lost = Math.min(maxSteal, want);
     coins = Math.max(0, coins - lost);
     addAxes({ heat: 5, street: -3 });
     punch(0.45);
     banner("COMPOSE YOURSELF", "#e04040", 2.5);
-    toast("You BURST. " + (lost ? lost + "¢ scatter. " : "") + "Heat spikes. Breathe. (Park / coffee cools you.)");
+    toast(
+      "You BURST. " +
+        (lost ? lost + "¢ scatter (kept a few). " : "Empty pockets — still look wild. ") +
+        "Heat spikes. Park / coffee cools you.",
+      4,
+      { now: true }
+    );
     pushLog("Anger burst" + (reason ? " after " + reason : "") + ". Lost " + lost + "¢.");
     sfx("warn");
     scandals.push("Public outburst day " + dayIndex);
@@ -1056,7 +1112,7 @@
       return;
     }
     const name = n ? n.name : "???";
-    toast(name + ": " + line, 4.5);
+    toast(name + ": " + line, 4.5, { now: true });
     if (n) balloon(n.x, n.y - 40, line.length > 42 ? line.slice(0, 40) + "…" : line, 3.2);
     sfx("blip");
     if (dialogue.angerPer) addAnger(dialogue.angerPer, name);
@@ -1084,6 +1140,12 @@
     dialogue = null;
     if (typeof cb === "function") cb();
     else if (npcId === "catlady") toast("Clara finally pauses. You escape. Time and patience: gone.");
+    // Deferred burst fires only after the monologue fully ends
+    if (pendingBurst || anger >= 100) {
+      const r = pendingBurst || "after monologue";
+      pendingBurst = null;
+      if (anger >= 100) burstAnger(r);
+    }
   }
 
   function addCoins(n, reason) {
@@ -1316,8 +1378,17 @@
     codexSeen[groupId] = true;
     const fav = favorOf(groupId);
     if (fav < need) {
-      toast(`${g.name}: favor ${fav}/${need}. ${g.recruitHint}`);
+      // Quiet mid-progress: float always; toast only first ping or almost-ready
       floatText(player.x, player.y - 36, `${g.icon || ""} ${fav}/${need}`, g.color);
+      const almost = fav >= need - 1;
+      const firstPing = before === 0;
+      if (firstPing || almost || need <= 2) {
+        toast(
+          almost
+            ? `${g.name}: favor ${fav}/${need} — ready after one more errand`
+            : `${g.name}: favor ${fav}/${need}`
+        );
+      }
       sfx("blip");
       return false;
     }
@@ -1651,21 +1722,26 @@
       sfx("blip");
     };
 
-    // ── Neighborhood antagonists ──
+    // ── Neighborhood antagonists (day-1 mercy: teach, don't maim) ──
+    const day1Soft = dayIndex === 1;
     if (n.id === "catlady") {
       if (dialogue) return;
       if (catLadyDay === dayIndex) {
         say(n.lines.done || "Mr. Whiskers says you're busy. He judges.");
-        addAnger(2, "Clara");
+        addAnger(day1Soft ? 1 : 2, "Clara");
         return;
       }
       catLadyDay = dayIndex;
       startDialogue("catlady", n.lines.monologue || [n.lines.default], {
-        angerPer: 3,
-        timePer: DAY_SECONDS * 0.04, // ~4% of day per bubble — she wastes the clock
+        angerPer: day1Soft ? 1 : 3,
+        timePer: DAY_SECONDS * (day1Soft ? 0.02 : 0.04),
         onDone: () => {
-          addAnger(6, "Clara monologue");
-          toast("Clara finally pauses. You escape. Time and patience: gone.");
+          addAnger(day1Soft ? 3 : 6, "Clara monologue");
+          toast(
+            day1Soft
+              ? "Clara pauses. Lesson learned: 💢 composure rises near her."
+              : "Clara finally pauses. You escape. Time and patience: gone."
+          );
         },
       });
       return;
@@ -1673,37 +1749,45 @@
     if (n.id === "karen") {
       if (karenDay === dayIndex) {
         say("I'm still documenting. Don't make me write your name in all caps.");
-        addAnger(4, "Karen encore");
+        addAnger(day1Soft ? 2 : 4, "Karen encore");
         return;
       }
       karenDay = dayIndex;
       const rant = (n.lines.rants && n.lines.rants[Math.floor(Math.random() * n.lines.rants.length)]) || n.lines.default;
       say(rant);
-      addAnger(12, "HOA Karen");
-      addAxes({ heat: 1, street: -1 });
-      toast("Anxiety spikes. Composure meter climbs.");
-      pushLog("Karen complained. Anger +" + 12 + ".");
+      const karAnger = day1Soft ? 6 : 12;
+      addAnger(karAnger, "HOA Karen");
+      addAxes({ heat: day1Soft ? 0 : 1, street: day1Soft ? 0 : -1 });
+      toast(day1Soft ? "HOA energy. Composure climbs — park cools it later." : "Anxiety spikes. Composure meter climbs.");
+      pushLog("Karen complained. Anger +" + karAnger + ".");
       return;
     }
     if (n.id === "drunk") {
       if (drunkDay === dayIndex) {
         say(n.lines.empty);
-        addAnger(2, "Doug");
+        addAnger(day1Soft ? 1 : 2, "Doug");
         return;
       }
       drunkDay = dayIndex;
       if (coins <= 0) {
         say(n.lines.broke);
-        addAnger(5, "Doug (broke)");
+        addAnger(day1Soft ? 3 : 5, "Doug (broke)");
         return;
       }
-      const steal = Math.min(coins, 5 + Math.floor(Math.random() * 11)); // 5–15
+      // Day-1: light lift, leave ~5¢ floor. Later: 5–15 but still floor at 5.
+      const floor = 5;
+      const want = day1Soft ? 2 + Math.floor(Math.random() * 3) : 5 + Math.floor(Math.random() * 11);
+      const steal = Math.min(Math.max(0, coins - floor), want);
       coins -= steal;
       floatText(player.x, player.y - 24, "−" + steal + "¢", "#ff6060");
-      say(n.lines.steal);
-      addAnger(10, "Doug theft");
-      addAxes({ heat: 1 });
-      toast("Doug lifts " + steal + "¢. Your composure frays.");
+      say(steal ? n.lines.steal : n.lines.empty || n.lines.broke);
+      addAnger(day1Soft ? 5 : 10, "Doug theft");
+      addAxes({ heat: day1Soft ? 0 : 1 });
+      toast(
+        steal
+          ? "Doug lifts " + steal + "¢" + (day1Soft ? " (day-one mercy)." : ". Your composure frays.")
+          : "Doug digs for change — you're already thin. Composure still frays."
+      );
       pushLog("Doug After-Hours stole " + steal + "¢.");
       sfx("warn");
       return;
@@ -1728,10 +1812,14 @@
         say(n.lines.permit);
         sfx("ok");
         pushLog("Permit delivered to Town Hall. Bureaucracy smiles (rare).");
-        addAnger(5, "permit desk");
+        addAnger(dayIndex === 1 ? 2 : 5, "permit desk");
         // One clean permit run earns Moderates (and a policy ping)
         bumpFavor("moderates", 1, { autoJoin: true });
         bumpFavor("policy", 1);
+        // Account meta: unlock path for Mayor Mandate
+        meta.permits = (meta.permits || 0) + 1;
+        saveMeta();
+        evaluateMilestones(true);
         return;
       }
       say(n.lines.default);
@@ -2042,6 +2130,9 @@
       bumpFavor("union", 1);
     }
     pushLog("Campus Union March resolved.");
+    meta.marches = (meta.marches || 0) + 1;
+    saveMeta();
+    evaluateMilestones(true);
     saveGame();
   }
 
@@ -2708,6 +2799,9 @@
       // Debate is the student errand climax
       bumpFavor("students", 2, { autoJoin: true });
       bumpFavor("moderates", 1);
+      meta.debatesWon = (meta.debatesWon || 0) + 1;
+      saveMeta();
+      evaluateMilestones(true);
     } else {
       addRep(2);
       addCoins(3);
@@ -2893,15 +2987,23 @@
   function update(dt) {
     animT += dt;
     tickMusic(dt);
-    if (msgT > 0) msgT -= dt;
+    if (msgT > 0) {
+      msgT -= dt;
+      if (msgT <= 0) drainToastQueue();
+    } else {
+      drainToastQueue();
+    }
     interactFlash = Math.max(0, interactFlash - dt);
     rallyT = Math.max(0, rallyT - dt);
 
     // Cat Lady auto-ambush: walk near her once/day → stuck monologue
+    // Day 1: wait until mid-morning so first errands aren't ambushed
     if (state === "play" && !dialogue && !dayEnded && player && catLadyDay !== dayIndex) {
-      const cl = NPCS.find((n) => n.id === "catlady");
-      if (cl && dist(player.x, player.y, cl.x, cl.y) < 52) {
-        talkNpc(cl);
+      if (!(dayIndex === 1 && time < 0.32)) {
+        const cl = NPCS.find((n) => n.id === "catlady");
+        if (cl && dist(player.x, player.y, cl.x, cl.y) < 52) {
+          talkNpc(cl);
+        }
       }
     }
 
@@ -5339,8 +5441,10 @@
 
   function charUnlockHint(id) {
     if (isCharUnlocked(id)) return "";
-    const ms = MILESTONES.find((m) => (m.unlocks || []).includes(id) && !m.auto);
-    return ms ? "🔒 " + ms.desc : "🔒 Locked";
+    // Prefer first unfinished non-secret path listed in data (easier paths first)
+    const paths = MILESTONES.filter((m) => (m.unlocks || []).includes(id) && !m.auto && !m.secret);
+    const open = paths.find((m) => !meta.milestones[m.id]) || paths[0];
+    return open ? "🔒 " + open.desc : "🔒 Locked";
   }
 
   function evaluateMilestones(announce) {
@@ -5355,6 +5459,9 @@
       let ok = true;
       if (n.weeksCleared != null && (meta.weeksCleared || 0) < n.weeksCleared) ok = false;
       if (n.maxVotersOneWeek != null && (meta.maxVotersOneWeek || 0) < n.maxVotersOneWeek) ok = false;
+      if (n.debatesWon != null && (meta.debatesWon || 0) < n.debatesWon) ok = false;
+      if (n.permits != null && (meta.permits || 0) < n.permits) ok = false;
+      if (n.marches != null && (meta.marches || 0) < n.marches) ok = false;
       if (n.coalition) {
         const times = (meta.coalitionsWon && meta.coalitionsWon[n.coalition]) || 0;
         if (times < 1) ok = false;

@@ -13,12 +13,14 @@ In-game: **G** opens boards · **Tab** switches Achievements ↔ Milestones.
 
 ## Character unlock path (milestones) — main roster
 
+Multiple paths per character (first match wins). Easier first-week routes listed first.
+
 | Character | Milestone | Requirement |
 |-----------|-----------|-------------|
 | Tiny Orange Man | Open the Plaza | Always free |
-| Rally Queen | First Election Night | Clear 1 week |
-| Mayor Mandate | Street Cred Season | Clear week with **Grassroots** |
-| Bernie Beans | Half the Town | 6 voters in one week |
+| Rally Queen | **Crowd Pulse** *or* First Election Night | **3 voters in one week** *or* clear 1 week |
+| Mayor Mandate | **Clean Permit** *or* **Stage Debut** *or* Street Cred Season | **Deliver permit** *or* **win Plaza Debate** *or* Grassroots week |
+| Bernie Beans | **March Feet Path** *or* Half the Town | **Union March once** *or* 6 voters in one week |
 | Leon Rocket | Full Roll Call | 12 voters in one week |
 | Buck Bootstraps | Money Machine Season | Clear week with **Money** |
 | (all main) | Seasoned Operator | Clear 3 weeks |

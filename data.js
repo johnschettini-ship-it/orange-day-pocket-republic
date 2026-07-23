@@ -414,6 +414,14 @@ const MILESTONES = [
     unlocks: ["tiny"],
     auto: true,
   },
+  // ── First-week path variety (easier paths listed first for hints) ──
+  {
+    id: "ms_crowd_pulse",
+    name: "Crowd Pulse",
+    desc: "Recruit 3 voter blocs in one week (often mid–first week).",
+    unlocks: ["alex"],
+    need: { maxVotersOneWeek: 3 },
+  },
   {
     id: "ms_first_week",
     name: "First Election Night",
@@ -422,11 +430,32 @@ const MILESTONES = [
     need: { weeksCleared: 1 },
   },
   {
+    id: "ms_permit_path",
+    name: "Clean Permit",
+    desc: "Deliver a Town Hall permit once (policy path).",
+    unlocks: ["mayor"],
+    need: { permits: 1 },
+  },
+  {
+    id: "ms_stage_debut",
+    name: "Stage Debut",
+    desc: "Win the Plaza Debate once (organizer path).",
+    unlocks: ["mayor"],
+    need: { debatesWon: 1 },
+  },
+  {
     id: "ms_street_week",
     name: "Street Cred Season",
     desc: "Clear a week while holding a Grassroots coalition on Election Night.",
     unlocks: ["mayor"],
     need: { weeksCleared: 1, coalition: "grassroots" },
+  },
+  {
+    id: "ms_march_path",
+    name: "March Feet Path",
+    desc: "Join the Union March once (street path).",
+    unlocks: ["bernie"],
+    need: { marches: 1 },
   },
   {
     id: "ms_half_map",
