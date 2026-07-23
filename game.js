@@ -154,7 +154,10 @@
     endingsSeen: {},
     coalitionsWon: {}, // coalition id -> times finished week with it
     milestones: {}, // id -> true
-    unlockedChars: { tiny: true },
+    // All 6 main characters play from the start (v1.4: milestones no longer
+    // gate the main roster — they're achievement flavor). Only the 4 secret
+    // cast ids get added to this via easter eggs.
+    unlockedChars: { tiny: true, alex: true, mayor: true, bernie: true, leon: true, donny: true },
     charsPlayed: {},
     weeksNoSteal: 0,
     debatesWon: 0, // account: plaza debate wins (unlock path)
@@ -4608,8 +4611,10 @@
     if (galleryTab === "miles") {
       ctx.fillStyle = "#c8b8d8";
       ctx.font = font(12);
+      const nMainMs = mainRoster().filter((c) => isCharUnlocked(c.id)).length;
+      const nSecretMs = secretRoster().filter((c) => isCharUnlocked(c.id)).length;
       ctx.fillText(
-        `Weeks cleared: ${meta.weeksCleared || 0} · Best voters/week: ${meta.maxVotersOneWeek || 0} · Cast: ${Object.keys(meta.unlockedChars || {}).filter((k) => meta.unlockedChars[k]).length}/6`,
+        `Weeks cleared: ${meta.weeksCleared || 0} · Best voters/week: ${meta.maxVotersOneWeek || 0} · Cast: ${nMainMs}/6 main · ${nSecretMs}/4 secret`,
         W / 2 - 330,
         120
       );
@@ -5800,7 +5805,10 @@
         meta = Object.assign(meta, m || {});
       }
       if (!meta.unlockedChars) meta.unlockedChars = { tiny: true };
-      meta.unlockedChars.tiny = true;
+      // Migrate any save from before v1.4 that only had tiny unlocked.
+      mainRoster().forEach((c) => {
+        meta.unlockedChars[c.id] = true;
+      });
       // Auto milestones
       MILESTONES.forEach((ms) => {
         if (ms.auto) {
@@ -5867,11 +5875,15 @@
         toast("Milestone: " + ms.name);
       }
     });
-    // Public achievements tied to progression
-    const mainUnlocked = mainRoster().filter((c) => meta.unlockedChars[c.id]).length;
+    // Public achievements tied to progression. Cast Call / Full Cast track
+    // main-cast MILESTONES completed, not unlockedChars — the main roster is
+    // free from the start (v1.4), so counting unlocked characters here would
+    // make both fire instantly on every player's first launch.
+    const mainMilestones = MILESTONES.filter((ms) => !ms.secret && !ms.auto);
+    const mainMilestonesDone = mainMilestones.filter((ms) => meta.milestones[ms.id]).length;
     const secretUnlocked = secretRoster().filter((c) => meta.unlockedChars[c.id]).length;
-    if (mainUnlocked >= 2) unlockAchieve("first_milestone", "Cast Call");
-    if (mainUnlocked >= 6) unlockAchieve("full_cast", "Full Cast");
+    if (mainMilestonesDone >= 1) unlockAchieve("first_milestone", "Cast Call");
+    if (mainMilestonesDone >= mainMilestones.length) unlockAchieve("full_cast", "Full Cast");
     if (secretUnlocked >= 1) unlockAchieve("secret_one", "Hidden Citizen");
     if (secretUnlocked >= 4) unlockAchieve("secret_all", "Deep Cut Cast");
     if ((meta.weeksCleared || 0) >= 3) unlockAchieve("three_weeks", "Three Seasons");
@@ -6004,6 +6016,12 @@
     },
     /** Headless / console QA helpers — do not use in player docs as required controls */
     qa: {
+      // Reads the exact same gate the real select-screen Enter/click confirm
+      // uses (game.js ~5439) — unlike startCharacter(), this has no bypass,
+      // so it actually proves whether a real player could pick this id.
+      isCharUnlocked(id) {
+        return isCharUnlocked(id);
+      },
       startCharacter(i) {
         charIdx = ((i % CHARACTERS.length) + CHARACTERS.length) % CHARACTERS.length;
         // QA bypass: unlock all cast for automated routes

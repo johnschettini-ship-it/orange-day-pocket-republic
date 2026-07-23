@@ -414,75 +414,66 @@ const MILESTONES = [
     unlocks: ["tiny"],
     auto: true,
   },
-  // ── First-week path variety (easier paths listed first for hints) ──
+  // ── Main-cast play-style milestones (pure achievement flavor — all 6 main
+  // characters are free from the start; these no longer gate selection) ──
   {
     id: "ms_crowd_pulse",
     name: "Crowd Pulse",
     desc: "Recruit 3 voter blocs in one week (often mid–first week).",
-    unlocks: ["alex"],
     need: { maxVotersOneWeek: 3 },
   },
   {
     id: "ms_first_week",
     name: "First Election Night",
     desc: "Finish a full week once (any ending).",
-    unlocks: ["alex"],
     need: { weeksCleared: 1 },
   },
   {
     id: "ms_permit_path",
     name: "Clean Permit",
     desc: "Deliver a Town Hall permit once (policy path).",
-    unlocks: ["mayor"],
     need: { permits: 1 },
   },
   {
     id: "ms_stage_debut",
     name: "Stage Debut",
     desc: "Win the Plaza Debate once (organizer path).",
-    unlocks: ["mayor"],
     need: { debatesWon: 1 },
   },
   {
     id: "ms_street_week",
     name: "Street Cred Season",
     desc: "Clear a week while holding a Grassroots coalition on Election Night.",
-    unlocks: ["mayor"],
     need: { weeksCleared: 1, coalition: "grassroots" },
   },
   {
     id: "ms_march_path",
     name: "March Feet Path",
     desc: "Join the Union March once (street path).",
-    unlocks: ["bernie"],
     need: { marches: 1 },
   },
   {
     id: "ms_half_map",
     name: "Half the Town",
     desc: "Recruit 6 voter blocs in a single week.",
-    unlocks: ["bernie"],
     need: { maxVotersOneWeek: 6 },
   },
   {
     id: "ms_full_dex",
     name: "Full Roll Call",
     desc: "Recruit all 12 voter blocs in one week.",
-    unlocks: ["leon"],
     need: { maxVotersOneWeek: 12 },
   },
   {
     id: "ms_money_week",
     name: "Money Machine Season",
     desc: "Clear a week while holding a Money Machine coalition.",
-    unlocks: ["donny"],
     need: { weeksCleared: 1, coalition: "money" },
   },
   {
     id: "ms_veteran",
     name: "Seasoned Operator",
     desc: "Clear 3 election weeks (any paths).",
-    unlocks: ["alex", "mayor", "bernie", "leon", "donny"],
     need: { weeksCleared: 3 },
   },
   // Secret cast — tracked as milestones once easter eggs fire (hidden until then)
