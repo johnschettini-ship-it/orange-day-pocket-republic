@@ -1094,13 +1094,98 @@
     }
   }
 
-  function clearSave() {
+  /**
+   * Wipe a save file. Pass slot 1–3, or omit for the active saveSlot.
+   * Also clears legacy SAVE_KEY when wiping the active slot.
+   */
+  function clearSave(slot) {
+    const s = slot != null ? slot | 0 : saveSlot;
     try {
       if (typeof localStorage !== "undefined") {
-        localStorage.removeItem(SAVE_KEY);
-        localStorage.removeItem(slotKey(saveSlot));
+        localStorage.removeItem(slotKey(s));
+        if (s === saveSlot) localStorage.removeItem(SAVE_KEY);
       }
     } catch (_) {}
+  }
+
+  // Title: second-press confirm for overwrite / delete (slot + action + timestamp)
+  let titlePending = null;
+
+  function titlePendingFresh(action, slot) {
+    return (
+      titlePending &&
+      titlePending.action === action &&
+      titlePending.slot === slot &&
+      performance.now() - titlePending.t < 4000
+    );
+  }
+
+  /** Start a new week in this file. Filled slots need a second confirm (N again). */
+  function requestNewInSlot(slot) {
+    const s = slot != null ? slot | 0 : saveSlot;
+    saveSlot = s;
+    if (!hasSave(s)) {
+      titlePending = null;
+      titleFocus = "new";
+      state = "select";
+      toast("New week — File " + s + ". Pick a citizen.");
+      sfx("ok");
+      return true;
+    }
+    if (titlePendingFresh("new", s)) {
+      titlePending = null;
+      titleFocus = "new";
+      state = "select";
+      toast("New week in File " + s + " — overwrites when you start.");
+      sfx("ok");
+      return true;
+    }
+    titlePending = { action: "new", slot: s, t: performance.now() };
+    toast("File " + s + " has a save. Press N again to start NEW (overwrites).");
+    sfx("warn");
+    return false;
+  }
+
+  /** Delete a save file. Needs a second Del/Backspace confirm when filled. */
+  function requestDeleteSlot(slot) {
+    const s = slot != null ? slot | 0 : saveSlot;
+    saveSlot = s;
+    if (!hasSave(s)) {
+      titlePending = null;
+      toast("File " + s + " is already empty.");
+      sfx("blip");
+      return false;
+    }
+    if (titlePendingFresh("delete", s)) {
+      titlePending = null;
+      clearSave(s);
+      titleFocus = "new";
+      toast("File " + s + " deleted. Ready for a new week.");
+      sfx("sleep");
+      return true;
+    }
+    titlePending = { action: "delete", slot: s, t: performance.now() };
+    toast("Delete File " + s + "? Press Del / Backspace again to confirm.");
+    sfx("warn");
+    return false;
+  }
+
+  /** Continue a filled slot, or new if empty. */
+  function activateTitleSlot(slot) {
+    const s = slot != null ? slot | 0 : saveSlot;
+    saveSlot = s;
+    titlePending = null;
+    ensureAudio();
+    if (hasSave(s)) {
+      titleFocus = "continue";
+      if (!loadGame(s)) {
+        titleFocus = "new";
+        state = "select";
+      }
+    } else {
+      titleFocus = "new";
+      state = "select";
+    }
   }
 
   function queueTip(id, text) {
@@ -1132,7 +1217,7 @@
     queueTip("home", "After midday (or when objectives are done), sleep at HOME to end the day.");
     queueTip("gates", "District gates unlock later: Media D2 · Campus D3 · Donors D4.");
     queueTip("codex", "C = voter codex · G = achievements · H = glossary · O = options.");
-    queueTip("slots", "Title screen: keys 1/2/3 pick a save slot before Continue.");
+    queueTip("slots", "Title: 1–3 pick File · Enter continue · N new (overwrite) · Del erase.");
     queueTip("favor", "Voters need ERRANDS (favor), not small talk. Check codex hints.");
     queueTip("composure", "💢 Composure: Karen, Doug & Clara raise it. Park bench or coffee cools it — bursting scatters ¢.");
     queueTip("texture", "Peck pigeons · booth photo · park can cool spats for 8¢.");
@@ -4341,39 +4426,73 @@
       drawRounded(x, cardY, cardW, cardH, 12);
       ctx.stroke();
 
+      // Hit targets for New / Del on selected filled cards (set below)
+      let btnNew = null,
+        btnDel = null;
+
       if (meta) {
         // Portrait
         const px = x + 14,
-          py = cardY + 22;
+          py = cardY + 18;
         if (
-          !drawSprite(`player/${meta.charId}_down_idle`, px, py, 48, 60) &&
-          !drawSprite(`player/${meta.charId}_idle`, px, py, 48, 60)
+          !drawSprite(`player/${meta.charId}_down_idle`, px, py, 44, 54) &&
+          !drawSprite(`player/${meta.charId}_idle`, px, py, 44, 54)
         ) {
           ctx.fillStyle = meta.charColor;
           ctx.beginPath();
-          ctx.arc(px + 24, py + 28, 22, 0, Math.PI * 2);
+          ctx.arc(px + 22, py + 26, 20, 0, Math.PI * 2);
           ctx.fill();
         }
         ctx.textAlign = "left";
         ctx.fillStyle = "#fff";
-        ctx.font = "bold 15px Segoe UI,sans-serif";
-        fitText(meta.charName, x + 72, cardY + 36, cardW - 88, "left");
+        ctx.font = "bold 14px Segoe UI,sans-serif";
+        fitText(meta.charName, x + 68, cardY + 32, cardW - 84, "left");
         ctx.fillStyle = "#ffb347";
-        ctx.font = "bold 13px Segoe UI,sans-serif";
-        ctx.fillText("Day " + meta.dayIndex + (meta.midDay ? " · mid-day" : ""), x + 72, cardY + 58);
+        ctx.font = "bold 12px Segoe UI,sans-serif";
+        ctx.fillText("Day " + meta.dayIndex + (meta.midDay ? " · mid" : ""), x + 68, cardY + 50);
         ctx.fillStyle = "#c8b8d8";
-        ctx.font = "12px Segoe UI,sans-serif";
-        fitText(meta.district, x + 72, cardY + 78, cardW - 88, "left");
+        ctx.font = "11px Segoe UI,sans-serif";
+        fitText(meta.district, x + 68, cardY + 68, cardW - 84, "left");
         ctx.fillStyle = "#ffd060";
-        ctx.font = "bold 12px Cascadia Mono,monospace";
-        ctx.fillText(meta.coins + "¢", x + 72, cardY + 100);
+        ctx.font = "bold 11px Cascadia Mono,monospace";
+        ctx.fillText(meta.coins + "¢", x + 68, cardY + 86);
         ctx.fillStyle = "#a0d0a8";
-        ctx.fillText(meta.voters + " voters", x + 130, cardY + 100);
+        ctx.fillText(meta.voters + "v", x + 120, cardY + 86);
+
         if (on) {
-          ctx.fillStyle = "#ffb347";
-          ctx.font = "bold 11px Segoe UI,sans-serif";
-          ctx.textAlign = "right";
-          ctx.fillText("Enter →", x + cardW - 14, cardY + 20);
+          // Action strip: Continue | New | Del
+          const by = cardY + cardH - 28;
+          const bw = 78,
+            bh = 20,
+            bgap = 6;
+          const bx0 = x + 10;
+          const actions = [
+            { id: "go", label: "Enter", x: bx0, color: "#ff9a3c" },
+            { id: "new", label: "N new", x: bx0 + bw + bgap, color: "#80c0e0" },
+            { id: "del", label: "Del", x: bx0 + 2 * (bw + bgap), color: "#e08080" },
+          ];
+          actions.forEach((a) => {
+            ctx.fillStyle = "rgba(15,10,25,0.75)";
+            drawRounded(a.x, by, bw, bh, 6);
+            ctx.fill();
+            ctx.strokeStyle = a.color;
+            ctx.lineWidth = 1.2;
+            drawRounded(a.x, by, bw, bh, 6);
+            ctx.stroke();
+            ctx.fillStyle = a.color;
+            ctx.font = "bold 11px Segoe UI,sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillText(a.label, a.x + bw / 2, by + 14);
+            if (a.id === "new") btnNew = { x: a.x, y: by, w: bw, h: bh };
+            if (a.id === "del") btnDel = { x: a.x, y: by, w: bw, h: bh };
+          });
+          // Pending confirm pulse
+          if (titlePending && titlePending.slot === s && performance.now() - titlePending.t < 4000) {
+            ctx.fillStyle = titlePending.action === "delete" ? "#e08080" : "#80c0e0";
+            ctx.font = "bold 10px Segoe UI,sans-serif";
+            ctx.textAlign = "right";
+            ctx.fillText(titlePending.action === "delete" ? "Del again!" : "N again!", x + cardW - 10, cardY + 16);
+          }
         }
       } else {
         ctx.textAlign = "center";
@@ -4386,15 +4505,19 @@
         if (on) {
           ctx.fillStyle = "#c8b8d8";
           ctx.font = "11px Segoe UI,sans-serif";
-          ctx.fillText("Enter to begin", x + cardW / 2, cardY + 96);
+          ctx.fillText("Enter or N", x + cardW / 2, cardY + 96);
         }
       }
+
+      // Store card + optional buttons for click hits
+      titleSaveCards[titleSaveCards.length - 1].btnNew = btnNew;
+      titleSaveCards[titleSaveCards.length - 1].btnDel = btnDel;
     }
 
     ctx.textAlign = "center";
     ctx.fillStyle = "#6a5a88";
     ctx.font = "11px Segoe UI,sans-serif";
-    ctx.fillText("Click a file · 1–3 · Enter", W / 2, 528);
+    ctx.fillText("1–3 file · Enter continue · N new · Del erase", W / 2, 528);
   }
 
   function drawOptions() {
@@ -4568,7 +4691,7 @@
       "Districts unlock: Media D2 · Campus D3 · Donors D4.",
       "Mayor Mandate / Leon Rocket are local/tech — not presidential.",
       "Soft NG+ — strong weeks bank start coins next New Week.",
-      "Save slots 1–3 on title (keys 1/2/3 when Continue focused).",
+      "Save files 1–3: Enter continue · N new (overwrite) · Del erase.",
       "Daily recruit goals reset each morning (new joins only).",
       "If few blocs remain, the daily target shrinks automatically.",
       "Blocs need FAVOR from annoying errands — chat alone won't convert them.",
@@ -5249,15 +5372,30 @@
     if (state === "title") {
       if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") {
         saveSlot = saveSlot <= 1 ? 3 : saveSlot - 1;
+        titlePending = null;
         titleFocus = hasSave(saveSlot) ? "continue" : "new";
       }
       if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") {
         saveSlot = saveSlot >= 3 ? 1 : saveSlot + 1;
+        titlePending = null;
         titleFocus = hasSave(saveSlot) ? "continue" : "new";
       }
       if (e.key === "1" || e.key === "2" || e.key === "3") {
         saveSlot = parseInt(e.key, 10);
+        titlePending = null;
         titleFocus = hasSave(saveSlot) ? "continue" : "new";
+      }
+      // N = new game in selected file (double-tap confirms overwrite)
+      if (e.key === "n" || e.key === "N") {
+        ensureAudio();
+        requestNewInSlot(saveSlot);
+        e.preventDefault();
+      }
+      // Delete / Backspace = erase selected file (double-tap confirms)
+      if (e.key === "Delete" || e.key === "Backspace") {
+        ensureAudio();
+        requestDeleteSlot(saveSlot);
+        e.preventDefault();
       }
       if (e.key === "m" || e.key === "M") {
         musicOn = !musicOn;
@@ -5277,17 +5415,8 @@
     }
     if (e.key === "Enter" || e.key === " ") {
       if (state === "title") {
-        ensureAudio();
-        // Full save card: filled → load that file; empty → new game into that file
-        if (hasSave(saveSlot)) {
-          if (!loadGame(saveSlot)) {
-            titleFocus = "new";
-            state = "select";
-          }
-        } else {
-          titleFocus = "new";
-          state = "select";
-        }
+        // Enter always continues (or starts empty) — never silent-overwrite
+        activateTitleSlot(saveSlot);
         e.preventDefault();
       } else if (state === "select") {
         const roster = selectRoster();
@@ -5425,25 +5554,36 @@
       // Prefer hit on a full save card
       const card = titleSaveCards.find((b) => mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h);
       if (card) {
-        saveSlot = card.slot;
-        if (hasSave(saveSlot)) {
-          titleFocus = "continue";
-          if (!loadGame(saveSlot)) {
-            titleFocus = "new";
-            state = "select";
-          }
-        } else {
+        // Action buttons on selected filled file
+        if (card.btnNew && mx >= card.btnNew.x && mx <= card.btnNew.x + card.btnNew.w && my >= card.btnNew.y && my <= card.btnNew.y + card.btnNew.h) {
+          saveSlot = card.slot;
+          requestNewInSlot(card.slot);
+          return true;
+        }
+        if (card.btnDel && mx >= card.btnDel.x && mx <= card.btnDel.x + card.btnDel.w && my >= card.btnDel.y && my <= card.btnDel.y + card.btnDel.h) {
+          saveSlot = card.slot;
+          requestDeleteSlot(card.slot);
+          return true;
+        }
+        // First click on a different card = select only; same filled card again = continue
+        if (saveSlot === card.slot && hasSave(card.slot)) {
+          activateTitleSlot(card.slot);
+        } else if (!hasSave(card.slot)) {
+          saveSlot = card.slot;
+          titlePending = null;
           titleFocus = "new";
           state = "select";
+        } else {
+          saveSlot = card.slot;
+          titlePending = null;
+          titleFocus = "continue";
+          toast("File " + card.slot + " selected — Enter continue · N new · Del erase");
+          sfx("blip");
         }
         return true;
       }
-      // Click elsewhere: activate selected card
-      if (hasSave(saveSlot)) {
-        if (!loadGame(saveSlot)) state = "select";
-      } else {
-        state = "select";
-      }
+      // Click elsewhere: activate selected card (continue or new)
+      activateTitleSlot(saveSlot);
       return true;
     }
     if (state === "select") {
@@ -5898,6 +6038,8 @@
       saveGame,
       loadGame,
       clearSave,
+      requestNewInSlot,
+      requestDeleteSlot,
       hasSave,
       getCrisis,
       runPlazaDebate,
