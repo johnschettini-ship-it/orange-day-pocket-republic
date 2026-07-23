@@ -154,10 +154,10 @@
     endingsSeen: {},
     coalitionsWon: {}, // coalition id -> times finished week with it
     milestones: {}, // id -> true
-    // All 6 main characters play from the start (v1.4: milestones no longer
-    // gate the main roster — they're achievement flavor). Only the 4 secret
-    // cast ids get added to this via easter eggs.
-    unlockedChars: { tiny: true, alex: true, mayor: true, bernie: true, leon: true, donny: true },
+    // Tiny (Orange Squeeze) is the only free starter. The other 5 main
+    // characters unlock via milestones (data.js MILESTONES `unlocks`), and
+    // the 4 secret cast unlock via easter eggs — 6 main + 4 secret = 10.
+    unlockedChars: { tiny: true },
     charsPlayed: {},
     weeksNoSteal: 0,
     debatesWon: 0, // account: plaza debate wins (unlock path)
@@ -5805,10 +5805,7 @@
         meta = Object.assign(meta, m || {});
       }
       if (!meta.unlockedChars) meta.unlockedChars = { tiny: true };
-      // Migrate any save from before v1.4 that only had tiny unlocked.
-      mainRoster().forEach((c) => {
-        meta.unlockedChars[c.id] = true;
-      });
+      meta.unlockedChars.tiny = true;
       // Auto milestones
       MILESTONES.forEach((ms) => {
         if (ms.auto) {
@@ -5875,15 +5872,11 @@
         toast("Milestone: " + ms.name);
       }
     });
-    // Public achievements tied to progression. Cast Call / Full Cast track
-    // main-cast MILESTONES completed, not unlockedChars — the main roster is
-    // free from the start (v1.4), so counting unlocked characters here would
-    // make both fire instantly on every player's first launch.
-    const mainMilestones = MILESTONES.filter((ms) => !ms.secret && !ms.auto);
-    const mainMilestonesDone = mainMilestones.filter((ms) => meta.milestones[ms.id]).length;
+    // Public achievements tied to progression
+    const mainUnlocked = mainRoster().filter((c) => meta.unlockedChars[c.id]).length;
     const secretUnlocked = secretRoster().filter((c) => meta.unlockedChars[c.id]).length;
-    if (mainMilestonesDone >= 1) unlockAchieve("first_milestone", "Cast Call");
-    if (mainMilestonesDone >= mainMilestones.length) unlockAchieve("full_cast", "Full Cast");
+    if (mainUnlocked >= 2) unlockAchieve("first_milestone", "Cast Call");
+    if (mainUnlocked >= 6) unlockAchieve("full_cast", "Full Cast");
     if (secretUnlocked >= 1) unlockAchieve("secret_one", "Hidden Citizen");
     if (secretUnlocked >= 4) unlockAchieve("secret_all", "Deep Cut Cast");
     if ((meta.weeksCleared || 0) >= 3) unlockAchieve("three_weeks", "Three Seasons");
