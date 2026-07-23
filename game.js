@@ -51,7 +51,7 @@
       regAsset(`player/${id}_walk_${f}`, `assets/player/${id}_walk_${f}.png`);
     }
   });
-  ["clerk", "barista", "vendor", "mover", "stagehand", "boothie", "parkgoer", "watchdog", "paver", "consultant"].forEach((id) => {
+  ["clerk", "barista", "vendor", "mover", "stagehand", "boothie", "parkgoer", "watchdog", "paver", "consultant", "catlady", "karen", "drunk"].forEach((id) => {
     regAsset(`npc/${id}`, `assets/npc/${id}.png`);
   });
   ["crypto", "wine", "students", "union", "moderates", "chaos", "donors", "conspiracy", "budget", "patriots", "policy", "lawn"].forEach((id) => {
@@ -346,6 +346,11 @@
   let axes = { street: 0, donor: 0, heat: 0 };
   let powerRank = 0; // 0..3 Phase B power tree
   let spatCount = 0;
+  let anger = 0; // 0–100 composure / burst meter (bureaucracy + antagonists)
+  let dialogue = null; // { lines:[], i, npcId, onDone, angerPer }
+  let karenDay = 0;
+  let drunkDay = 0;
+  let catLadyDay = 0;
   let camPunch = 0;
   let redistribT = 0;
   let launchT = 0;
@@ -491,6 +496,11 @@
     axes = { street: 0, donor: 0, heat: 0 };
     powerRank = 0;
     spatCount = 0;
+    anger = 0;
+    dialogue = null;
+    karenDay = 0;
+    drunkDay = 0;
+    catLadyDay = 0;
     camPunch = 0;
     redistribT = 0;
     launchT = 0;
@@ -627,6 +637,7 @@
       axes: { ...axes },
       powerRank,
       spatCount,
+      anger,
       currentDistrict,
       setpieces: { ...setpieces },
       scandals: scandals.slice(),
@@ -775,6 +786,7 @@
       rep = data.rep | 0;
       powerRank = clamp(data.powerRank | 0, 0, 3);
       spatCount = data.spatCount | 0;
+      anger = clamp(data.anger | 0, 0, 100);
       currentDistrict = data.currentDistrict || "plaza";
       setpieces = data.setpieces || { debate: false, scandal: false, march: false, gala: false };
       scandals = Array.isArray(data.scandals) ? data.scandals.slice() : [];
@@ -988,6 +1000,90 @@
     // Mix classic 7 with 1.1 extras so weeks feel less identical
     const idx = (dayIndex - 1 + (dayIndex > 4 ? 2 : 0)) % BOARD_RULES.length;
     return BOARD_RULES[idx];
+  }
+
+  function addAnger(n, reason) {
+    if (!n) return;
+    const prev = anger;
+    anger = clamp((anger || 0) + n, 0, 100);
+    if (n > 0 && player) {
+      floatText(player.x + 18, player.y - 48, (n > 0 ? "+" : "") + n + " 💢", n > 0 ? "#e06060" : "#80e0a0");
+    }
+    if (prev < 100 && anger >= 100) {
+      burstAnger(reason);
+    }
+  }
+
+  function calmAnger(n, reason) {
+    if (!n) return;
+    anger = clamp((anger || 0) - Math.abs(n), 0, 100);
+    if (player) floatText(player.x - 18, player.y - 48, "−" + Math.abs(n) + " 💢", "#80e0a0");
+  }
+
+  function burstAnger(reason) {
+    anger = 32;
+    const lost = Math.min(coins, 8 + Math.floor(Math.random() * 6));
+    coins = Math.max(0, coins - lost);
+    addAxes({ heat: 5, street: -3 });
+    punch(0.45);
+    banner("COMPOSE YOURSELF", "#e04040", 2.5);
+    toast("You BURST. " + (lost ? lost + "¢ scatter. " : "") + "Heat spikes. Breathe. (Park / coffee cools you.)");
+    pushLog("Anger burst" + (reason ? " after " + reason : "") + ". Lost " + lost + "¢.");
+    sfx("warn");
+    scandals.push("Public outburst day " + dayIndex);
+  }
+
+  function startDialogue(npcId, lines, opts) {
+    if (!lines || !lines.length) return;
+    const n = NPCS.find((x) => x.id === npcId);
+    dialogue = {
+      npcId,
+      lines: lines.slice(),
+      i: 0,
+      angerPer: (opts && opts.angerPer) || 0,
+      timePer: (opts && opts.timePer) || 0, // daySec waste per bubble
+      onDone: opts && opts.onDone,
+    };
+    showDialogueLine();
+  }
+
+  function showDialogueLine() {
+    if (!dialogue) return;
+    const n = NPCS.find((x) => x.id === dialogue.npcId);
+    const line = dialogue.lines[dialogue.i];
+    if (!line) {
+      endDialogue();
+      return;
+    }
+    const name = n ? n.name : "???";
+    toast(name + ": " + line, 4.5);
+    if (n) balloon(n.x, n.y - 40, line.length > 42 ? line.slice(0, 40) + "…" : line, 3.2);
+    sfx("blip");
+    if (dialogue.angerPer) addAnger(dialogue.angerPer, name);
+    if (dialogue.timePer) {
+      daySec = Math.min(DAY_SECONDS * 0.95, daySec + dialogue.timePer);
+      time = clamp(daySec / DAY_SECONDS, 0, 1);
+    }
+  }
+
+  function advanceDialogue() {
+    if (!dialogue) return false;
+    dialogue.i++;
+    if (dialogue.i >= dialogue.lines.length) {
+      endDialogue();
+      return true;
+    }
+    showDialogueLine();
+    return true;
+  }
+
+  function endDialogue() {
+    if (!dialogue) return;
+    const cb = dialogue.onDone;
+    const npcId = dialogue.npcId;
+    dialogue = null;
+    if (typeof cb === "function") cb();
+    else if (npcId === "catlady") toast("Clara finally pauses. You escape. Time and patience: gone.");
   }
 
   function addCoins(n, reason) {
@@ -1463,6 +1559,14 @@
 
   function interact() {
     if (state !== "play" || dayEnded) return;
+    // Forced monologue: only advance dialogue (time waster)
+    if (dialogue) {
+      const nowD = performance.now();
+      if (nowD - lastInteract < 220) return;
+      lastInteract = nowD;
+      advanceDialogue();
+      return;
+    }
     const now = performance.now();
     if (now - lastInteract < 280) return;
     lastInteract = now;
@@ -1546,6 +1650,65 @@
       balloon(n.x, n.y - 38, line, 2.8);
       sfx("blip");
     };
+
+    // ── Neighborhood antagonists ──
+    if (n.id === "catlady") {
+      if (dialogue) return;
+      if (catLadyDay === dayIndex) {
+        say(n.lines.done || "Mr. Whiskers says you're busy. He judges.");
+        addAnger(2, "Clara");
+        return;
+      }
+      catLadyDay = dayIndex;
+      startDialogue("catlady", n.lines.monologue || [n.lines.default], {
+        angerPer: 3,
+        timePer: DAY_SECONDS * 0.04, // ~4% of day per bubble — she wastes the clock
+        onDone: () => {
+          addAnger(6, "Clara monologue");
+          toast("Clara finally pauses. You escape. Time and patience: gone.");
+        },
+      });
+      return;
+    }
+    if (n.id === "karen") {
+      if (karenDay === dayIndex) {
+        say("I'm still documenting. Don't make me write your name in all caps.");
+        addAnger(4, "Karen encore");
+        return;
+      }
+      karenDay = dayIndex;
+      const rant = (n.lines.rants && n.lines.rants[Math.floor(Math.random() * n.lines.rants.length)]) || n.lines.default;
+      say(rant);
+      addAnger(12, "HOA Karen");
+      addAxes({ heat: 1, street: -1 });
+      toast("Anxiety spikes. Composure meter climbs.");
+      pushLog("Karen complained. Anger +" + 12 + ".");
+      return;
+    }
+    if (n.id === "drunk") {
+      if (drunkDay === dayIndex) {
+        say(n.lines.empty);
+        addAnger(2, "Doug");
+        return;
+      }
+      drunkDay = dayIndex;
+      if (coins <= 0) {
+        say(n.lines.broke);
+        addAnger(5, "Doug (broke)");
+        return;
+      }
+      const steal = Math.min(coins, 5 + Math.floor(Math.random() * 11)); // 5–15
+      coins -= steal;
+      floatText(player.x, player.y - 24, "−" + steal + "¢", "#ff6060");
+      say(n.lines.steal);
+      addAnger(10, "Doug theft");
+      addAxes({ heat: 1 });
+      toast("Doug lifts " + steal + "¢. Your composure frays.");
+      pushLog("Doug After-Hours stole " + steal + "¢.");
+      sfx("warn");
+      return;
+    }
+
     // Day-gated flavor (C7)
     if (n.dayLines && n.dayLines[dayIndex] && Math.random() < 0.85) {
       // fall through after optional beat — show day line once per chat if no special quest
@@ -1565,6 +1728,7 @@
         say(n.lines.permit);
         sfx("ok");
         pushLog("Permit delivered to Town Hall. Bureaucracy smiles (rare).");
+        addAnger(5, "permit desk");
         // One clean permit run earns Moderates (and a policy ping)
         bumpFavor("moderates", 1, { autoJoin: true });
         bumpFavor("policy", 1);
@@ -1598,6 +1762,7 @@
       say(n.lines.fix);
       sfx("ok");
       pushLog("Coffee cart restored. Civic metabolism online.");
+      calmAnger(8, "coffee");
       bumpFavor("wine", 1);
       return;
     }
@@ -1633,6 +1798,7 @@
       coins -= 10;
       potholePaid++;
       floatText(player.x, player.y - 20, "-10¢", "#ff8080");
+      addAnger(5, "pothole grift");
       if (potholePaid <= 3) {
         say(potholePaid === 1 ? n.lines.default : n.lines.excuses[(potholePaid - 2) % n.lines.excuses.length]);
         pushLog(`Paid Paver Pete 10¢ for pothole repair (total: ${potholePaid * 10}¢). Potholes: unchanged.`);
@@ -1665,6 +1831,7 @@
       const line = n.lines.sold[(consultantPaid - 1) % n.lines.sold.length];
       say(line);
       addAxes({ donor: 1, heat: consultantPaid >= 3 ? 1 : 0 });
+      addAnger(8, "Cole invoice");
       pushLog(`Paid Consultant Cole 15¢ for a memo (#${consultantPaid}). Content: synergy-adjacent.`);
       // Policy nerds hate empty memos; donors weirdly love them
       bumpFavor("donors", 1);
@@ -1974,6 +2141,7 @@
       // Budget Watchers respect people who read the board (annoying, intentional)
       bumpFavor("budget", 1);
       noteEaster("boardReads", 1); // secret: Mae Memo at 10
+      addAnger(4, "board bureaucracy");
       return;
     }
 
@@ -2098,6 +2266,7 @@
       pushLog("Took the Board of Education to lunch. They ordered the salmon. Policy discussed: none.");
       burst(player.x, player.y, "#d0c060", 12);
       bumpFavor("policy", 1);
+      addAnger(6, "BoE lunch");
       sfx("ok");
       return;
     }
@@ -2121,11 +2290,13 @@
       burst(player.x, player.y, "#e080c0", 14);
       bumpFavor("patriots", 1);
       bumpFavor("donors", 1);
+      addAnger(5, "ad buy");
       sfx("ok");
       return;
     }
 
     if (z.id === "park") {
+      calmAnger(6, "park air");
       // Reconciliation: park + 8¢ cools a spat (texture pack fairness valve)
       if (spatCount > 0 && reconDay !== dayIndex && coins >= 8) {
         if (trySpatReconciliation(true)) return;
@@ -2575,6 +2746,8 @@
       setObj("home", 1);
       homeOk = true;
     }
+    // Sleep cools the nerves a bit
+    calmAnger(18, "sleep");
     // loyalty maintenance (mild) + light rival pressure
     const riskIds = applyLoyaltyEndOfDay();
     const rivalNote = applyRivalEndOfDay();
@@ -2724,6 +2897,14 @@
     interactFlash = Math.max(0, interactFlash - dt);
     rallyT = Math.max(0, rallyT - dt);
 
+    // Cat Lady auto-ambush: walk near her once/day → stuck monologue
+    if (state === "play" && !dialogue && !dayEnded && player && catLadyDay !== dayIndex) {
+      const cl = NPCS.find((n) => n.id === "catlady");
+      if (cl && dist(player.x, player.y, cl.x, cl.y) < 52) {
+        talkNpc(cl);
+      }
+    }
+
     for (let i = floaters.length - 1; i >= 0; i--) {
       const f = floaters[i];
       f.life -= dt;
@@ -2752,6 +2933,11 @@
     }
 
     if (state !== "play") return;
+    // Stuck in monologue — E advances bubbles; no walking away mid-rant
+    if (dialogue) {
+      if (player) player.moving = false;
+      return;
+    }
 
     daySec += dt;
     time = clamp(daySec / DAY_SECONDS, 0, 1);
@@ -3340,8 +3526,35 @@
     }
   }
 
+  function drawAngerMeter() {
+    if (!player || state !== "play") return;
+    const a = clamp(anger || 0, 0, 100);
+    const bw = 36,
+      bh = 5;
+    const x = player.x - bw / 2;
+    const y = player.y - 58 + Math.sin(player.bob || 0) * 2;
+    ctx.fillStyle = "rgba(0,0,0,0.45)";
+    drawRounded(x - 1, y - 1, bw + 2, bh + 2, 3);
+    ctx.fill();
+    // green → yellow → red
+    const t = a / 100;
+    const r = Math.floor(80 + t * 175);
+    const g = Math.floor(200 - t * 160);
+    const b = 70;
+    ctx.fillStyle = `rgb(${r},${g},${b})`;
+    drawRounded(x, y, Math.max(2, (bw * a) / 100), bh, 2);
+    ctx.fill();
+    if (a >= 70) {
+      ctx.fillStyle = a >= 90 ? "#ff6060" : "#ffb080";
+      ctx.font = "bold 9px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText(a >= 90 ? "!" : "…", player.x, y - 4);
+    }
+  }
+
   function drawPlayer() {
     drawPlayerBody();
+    drawAngerMeter();
     drawPlayerFx();
   }
 
@@ -4051,6 +4264,9 @@
       "Failed pitches after favor can cost a favor point. Grind again.",
       "Park + 8¢ cools a spat. Pigeons ×3 whisper. Booth photo once/day.",
       "Coalition form day: cheaper buttons + recruit tip. Headlines are flavor.",
+      "Composure 💢 meter fills from bureaucracy & neighbors. At 100 you BURST.",
+      "Clara Catwell monologues (E to click through). Karen raises anxiety. Doug steals ¢.",
+      "Park and coffee cool the meter. Don't explode on Election Eve.",
     ];
     lines.forEach((line, i) => {
       ctx.fillText("· " + line, W / 2 - 270, 120 + i * 26);
@@ -5288,6 +5504,8 @@
         axes: { ...axes },
         powerRank,
         spatCount,
+        anger,
+        dialogue: !!dialogue,
         coalition: coalitionLabel(),
         boardRule: getBoardRule().id,
         evening: !!evening,
