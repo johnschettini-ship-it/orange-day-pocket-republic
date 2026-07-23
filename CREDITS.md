@@ -12,7 +12,10 @@ All characters are **fictional parody archetypes**. No real names, likenesses, s
 - HTML5 Canvas, vanilla JavaScript & CSS  
 - Content module `data.js` + runtime `game.js`  
 - Procedural pixel sprites (`tools/gen_sprites.py` + Pillow)  
-- Web Audio API for music/SFX (no third-party samples)  
+- Web Audio API procedural soundtrack (no third-party samples)  
+  Themes: cold-open · title · character select · play (per-district pads) · evening · election night  
+  Stings: composure burst · achievement chime · election fanfare  
+ 
 
 ## Fonts
 System UI stack: Segoe UI / system-ui (no bundled font license required).

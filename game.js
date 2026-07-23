@@ -114,15 +114,19 @@
     return drawSprite(key, cx - w / 2, cy - h / 2, w, h);
   }
 
-  // Soft UI beeps + light music bed (no external audio files)
+  // Procedural soundtrack (Web Audio only — no external samples)
+  // Themes: intro · title · select · play (per-district) · evening · results
   let audioCtx = null;
   let sfxVol = 0.7;
   let musicVol = 0.35;
   let sfxOn = true;
   let musicOn = true;
-  let musicNodes = null;
+  let musicNodes = null; // { master, ac, pad, padGain, theme }
+  let musicTheme = null;
   let musicStep = 0;
   let musicAcc = 0;
+  let musicBar = 0;
+  let musicSyncKey = ""; // avoid re-ramping gain every frame
   let textScale = 1; // 1 or 1.15 (D6)
   let reduceFlash = false;
   let showOptions = false;
@@ -187,10 +191,61 @@
       const ac = ensureAudio();
       if (!ac) return;
       const t0 = ac.currentTime;
-      const o = ac.createOscillator();
-      const g = ac.createGain();
-      o.connect(g);
-      g.connect(ac.destination);
+      const peak = 0.055 * sfxVol;
+      // Multi-voice stings for big moments
+      if (kind === "burst") {
+        // Composure burst — descending minor triad
+        [220, 261, 311].forEach((f, i) => {
+          const o = ac.createOscillator();
+          const g = ac.createGain();
+          o.type = "sawtooth";
+          o.frequency.setValueAtTime(f, t0 + i * 0.04);
+          o.frequency.exponentialRampToValueAtTime(f * 0.55, t0 + 0.35 + i * 0.04);
+          o.connect(g);
+          g.connect(ac.destination);
+          g.gain.setValueAtTime(0.0001, t0);
+          g.gain.exponentialRampToValueAtTime(peak * 0.9, t0 + 0.02 + i * 0.04);
+          g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.4 + i * 0.05);
+          o.start(t0 + i * 0.04);
+          o.stop(t0 + 0.45 + i * 0.05);
+        });
+        return;
+      }
+      if (kind === "fanfare") {
+        // Election night / milestone — ascending open fifths
+        [392, 523, 659, 784].forEach((f, i) => {
+          const o = ac.createOscillator();
+          const g = ac.createGain();
+          o.type = "triangle";
+          o.frequency.setValueAtTime(f, t0 + i * 0.09);
+          o.connect(g);
+          g.connect(ac.destination);
+          g.gain.setValueAtTime(0.0001, t0 + i * 0.09);
+          g.gain.exponentialRampToValueAtTime(peak * 0.85, t0 + i * 0.09 + 0.02);
+          g.gain.exponentialRampToValueAtTime(0.0001, t0 + i * 0.09 + 0.28);
+          o.start(t0 + i * 0.09);
+          o.stop(t0 + i * 0.09 + 0.32);
+        });
+        return;
+      }
+      if (kind === "chime") {
+        // Soft title / unlock chime
+        [523, 659, 784].forEach((f, i) => {
+          const o = ac.createOscillator();
+          const g = ac.createGain();
+          o.type = "sine";
+          o.frequency.value = f;
+          o.connect(g);
+          g.connect(ac.destination);
+          const at = t0 + i * 0.07;
+          g.gain.setValueAtTime(0.0001, at);
+          g.gain.exponentialRampToValueAtTime(peak * 0.7, at + 0.02);
+          g.gain.exponentialRampToValueAtTime(0.0001, at + 0.35);
+          o.start(at);
+          o.stop(at + 0.4);
+        });
+        return;
+      }
       const tones = {
         blip: [520, 0.05, "square"],
         ok: [660, 0.07, "triangle"],
@@ -198,21 +253,30 @@
         power: [400, 0.1, "sawtooth"],
         recruit: [523, 0.08, "triangle"],
         warn: [220, 0.12, "square"],
-        sleep: [392, 0.15, "sine"],
+        sleep: [392, 0.18, "sine"],
         debate: [330, 0.12, "triangle"],
-        day: [440, 0.1, "sine"],
+        day: [440, 0.12, "sine"],
         stamp: [180, 0.08, "square"],
         sting: [523, 0.18, "triangle"],
         district: [349, 0.12, "sine"],
       };
       const [freq, dur, type] = tones[kind] || tones.blip;
+      const o = ac.createOscillator();
+      const g = ac.createGain();
       o.type = type;
       o.frequency.setValueAtTime(freq, t0);
+      o.connect(g);
+      g.connect(ac.destination);
       if (kind === "ok" || kind === "recruit") o.frequency.exponentialRampToValueAtTime(freq * 1.35, t0 + dur);
       if (kind === "coin") o.frequency.exponentialRampToValueAtTime(1200, t0 + dur);
       if (kind === "debate" || kind === "sting") o.frequency.exponentialRampToValueAtTime(freq * 1.5, t0 + dur);
       if (kind === "district") o.frequency.exponentialRampToValueAtTime(freq * 1.25, t0 + dur);
-      const peak = 0.05 * sfxVol;
+      if (kind === "sleep") o.frequency.exponentialRampToValueAtTime(freq * 0.7, t0 + dur);
+      if (kind === "day") {
+        // Morning interval — fifth up
+        o.frequency.setValueAtTime(freq, t0);
+        o.frequency.setValueAtTime(freq * 1.5, t0 + dur * 0.45);
+      }
       g.gain.setValueAtTime(0.0001, t0);
       g.gain.exponentialRampToValueAtTime(Math.max(0.0002, peak), t0 + 0.01);
       g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
@@ -223,72 +287,217 @@
     }
   }
 
-  function startMusic() {
-    if (!musicOn || musicNodes) return;
+  /** Theme master gain targets (before musicVol). */
+  function themeMasterLevel(theme) {
+    const base = {
+      intro: 0.045,
+      title: 0.05,
+      select: 0.042,
+      play: 0.048,
+      evening: 0.04,
+      results: 0.055,
+    };
+    let lv = (base[theme] || 0.045) * musicVol;
+    if (state === "pause" && theme === "play") lv *= 0.45; // duck under pause menu
+    return lv;
+  }
+
+  function desiredMusicTheme() {
+    if (!musicOn) return null;
+    if (state === "intro") return "intro";
+    if (state === "title") return "title";
+    if (state === "select") return "select";
+    if (state === "evening") return "evening";
+    if (state === "results") return "results";
+    if (state === "play" || state === "pause") return "play";
+    return null;
+  }
+
+  function startMusic(theme) {
+    if (!musicOn) return;
+    const want = theme || desiredMusicTheme() || "play";
     try {
       const ac = ensureAudio();
       if (!ac) return;
+      // Soft crossfade: kill previous graph
+      if (musicNodes) {
+        try {
+          const old = musicNodes;
+          old.master.gain.cancelScheduledValues(ac.currentTime);
+          old.master.gain.linearRampToValueAtTime(0.0001, ac.currentTime + 0.18);
+          if (old.pad) {
+            try {
+              old.pad.stop(ac.currentTime + 0.2);
+            } catch (_) {}
+          }
+          setTimeout(() => {
+            try {
+              old.master.disconnect();
+            } catch (_) {}
+          }, 250);
+        } catch (_) {}
+        musicNodes = null;
+      }
       const master = ac.createGain();
       master.gain.value = 0.0001;
       master.connect(ac.destination);
-      master.gain.linearRampToValueAtTime(0.04 * musicVol, ac.currentTime + 0.5);
-      musicNodes = { master, ac };
+      master.gain.linearRampToValueAtTime(themeMasterLevel(want), ac.currentTime + 0.45);
+
+      // Warm bass pad (root) — sustained sine under melody
+      const pad = ac.createOscillator();
+      const padGain = ac.createGain();
+      pad.type = "sine";
+      const roots = {
+        intro: 131,
+        title: 147,
+        select: 165,
+        play: 131,
+        evening: 110,
+        results: 147,
+      };
+      pad.frequency.value = roots[want] || 131;
+      padGain.gain.value = 0.0001;
+      pad.connect(padGain);
+      padGain.connect(master);
+      padGain.gain.linearRampToValueAtTime(0.35, ac.currentTime + 0.8);
+      pad.start();
+
+      musicNodes = { master, ac, pad, padGain, theme: want };
+      musicTheme = want;
       musicStep = 0;
       musicAcc = 0;
+      musicBar = 0;
     } catch (_) {
       musicNodes = null;
+      musicTheme = null;
     }
   }
 
   function stopMusic() {
-    if (!musicNodes) return;
+    if (!musicNodes) {
+      musicTheme = null;
+      return;
+    }
     try {
-      const { master, ac } = musicNodes;
+      const { master, ac, pad } = musicNodes;
       master.gain.cancelScheduledValues(ac.currentTime);
-      master.gain.linearRampToValueAtTime(0.0001, ac.currentTime + 0.3);
+      master.gain.linearRampToValueAtTime(0.0001, ac.currentTime + 0.35);
+      if (pad) {
+        try {
+          pad.stop(ac.currentTime + 0.4);
+        } catch (_) {}
+      }
       setTimeout(() => {
         try {
           master.disconnect();
         } catch (_) {}
-      }, 400);
+      }, 450);
     } catch (_) {}
     musicNodes = null;
+    musicTheme = null;
+    musicSyncKey = "";
+  }
+
+  /** Keep theme + master level in sync with game state. */
+  function syncMusic() {
+    const want = desiredMusicTheme();
+    if (!want) {
+      if (musicNodes) stopMusic();
+      musicSyncKey = "";
+      return;
+    }
+    if (!musicNodes || musicTheme !== want) {
+      startMusic(want);
+      musicSyncKey = want + "|" + state + "|" + (currentDistrict || "") + "|" + musicVol;
+      return;
+    }
+    const key = want + "|" + state + "|" + (want === "play" ? currentDistrict || "" : "") + "|" + musicVol;
+    if (key === musicSyncKey) return;
+    musicSyncKey = key;
+    // Live duck / volume / district pad when something actually changed
+    try {
+      const { master, ac, pad, padGain } = musicNodes;
+      const target = themeMasterLevel(want);
+      master.gain.cancelScheduledValues(ac.currentTime);
+      master.gain.linearRampToValueAtTime(target, ac.currentTime + 0.15);
+      if (want === "play" && pad) {
+        const distRoots = { plaza: 131, media: 139, campus: 147, donor: 123 };
+        const r = distRoots[currentDistrict] || 131;
+        pad.frequency.setTargetAtTime(r, ac.currentTime, 0.25);
+        if (padGain) padGain.gain.setTargetAtTime(0.32, ac.currentTime, 0.2);
+      }
+    } catch (_) {}
   }
 
   function tickMusic(dt) {
-    if (!musicOn || !musicNodes || state !== "play") return;
+    if (!musicOn || !musicNodes) return;
+    const theme = musicTheme || "play";
     try {
-      // District intensity: faster / brighter patterns off-plaza
-      const distPace =
-        currentDistrict === "media" ? 0.16 : currentDistrict === "donor" ? 0.18 : currentDistrict === "campus" ? 0.2 : 0.22;
+      const specs = {
+        intro: { pace: 0.28, scale: [262, 294, 330, 392, 440], pattern: [0, 2, 4, 2, 3, 4, 5, 4], type: "sine", peak: 0.09, len: 0.22 },
+        title: { pace: 0.26, scale: [294, 330, 370, 392, 440, 494], pattern: [0, 2, 4, 5, 4, 2, 3, 0, 4, 2], type: "triangle", peak: 0.1, len: 0.2 },
+        select: { pace: 0.2, scale: [330, 370, 392, 440, 494, 523], pattern: [0, 1, 2, 4, 2, 1, 3, 5], type: "triangle", peak: 0.09, len: 0.14 },
+        evening: { pace: 0.32, scale: [220, 247, 262, 294, 330, 349], pattern: [0, 2, 3, 2, 4, 3, 2, 0], type: "sine", peak: 0.08, len: 0.28 },
+        results: { pace: 0.22, scale: [262, 330, 392, 440, 523, 659], pattern: [0, 2, 4, 5, 4, 2, 3, 5, 4, 2, 0, 0], type: "triangle", peak: 0.11, len: 0.18 },
+      };
+      let spec = specs[theme];
+      if (theme === "play") {
+        const distPace =
+          currentDistrict === "media" ? 0.15 : currentDistrict === "donor" ? 0.17 : currentDistrict === "campus" ? 0.19 : 0.22;
+        const scales = {
+          plaza: [262, 294, 330, 349, 392, 440],
+          media: [277, 311, 370, 415, 466, 554],
+          campus: [294, 330, 370, 392, 440, 494],
+          donor: [247, 294, 330, 370, 440, 523],
+        };
+        const patterns = {
+          plaza: [0, 2, 4, 2, 5, 4, 3, 0],
+          media: [0, 3, 5, 3, 4, 1, 5, 2],
+          campus: [0, 2, 3, 5, 4, 2, 1, 0],
+          donor: [0, 4, 2, 5, 3, 4, 1, 0],
+        };
+        const d = currentDistrict || "plaza";
+        spec = {
+          pace: distPace,
+          scale: scales[d] || scales.plaza,
+          pattern: patterns[d] || patterns.plaza,
+          type: d === "media" ? "triangle" : d === "donor" ? "triangle" : "sine",
+          peak: 0.1 * (d === "plaza" ? 1 : 1.12),
+          len: 0.16,
+        };
+      }
+      if (!spec) return;
       musicAcc += dt;
-      if (musicAcc < distPace) return;
+      if (musicAcc < spec.pace) return;
       musicAcc = 0;
       const ac = musicNodes.ac;
-      const scales = {
-        plaza: [262, 294, 330, 349, 392, 440],
-        media: [277, 311, 370, 415, 466, 554],
-        campus: [294, 330, 370, 392, 440, 494],
-        donor: [247, 294, 330, 370, 440, 523],
-      };
-      const scale = scales[currentDistrict] || scales.plaza;
-      const pattern = [0, 2, 4, 2, 5, 4, 3, 0];
-      const note = scale[pattern[musicStep % pattern.length] % scale.length];
+      const idx = patternIndex(spec.pattern, musicStep);
       musicStep++;
-      const o = ac.createOscillator();
-      const g = ac.createGain();
-      o.type = currentDistrict === "media" ? "triangle" : "sine";
-      o.frequency.value = note;
-      o.connect(g);
-      g.connect(musicNodes.master);
+      musicBar++;
+      const note = spec.scale[idx % spec.scale.length];
+      // Occasional harmony (every 4th step) — major third
+      const voices = musicBar % 4 === 0 ? [1, 5 / 4] : [1];
       const t0 = ac.currentTime;
-      const peak = 0.1 * musicVol * (currentDistrict === "plaza" ? 1 : 1.15);
-      g.gain.setValueAtTime(0.0001, t0);
-      g.gain.exponentialRampToValueAtTime(peak, t0 + 0.02);
-      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.16);
-      o.start(t0);
-      o.stop(t0 + 0.18);
+      voices.forEach((mult, vi) => {
+        const o = ac.createOscillator();
+        const g = ac.createGain();
+        o.type = spec.type;
+        o.frequency.value = note * mult;
+        o.connect(g);
+        g.connect(musicNodes.master);
+        // Master already scales by musicVol; note peak is relative
+        const p = Math.max(0.0002, spec.peak * (vi ? 0.38 : 1) * 0.55);
+        g.gain.setValueAtTime(0.0001, t0);
+        g.gain.exponentialRampToValueAtTime(p, t0 + 0.02);
+        g.gain.exponentialRampToValueAtTime(0.0001, t0 + spec.len);
+        o.start(t0);
+        o.stop(t0 + spec.len + 0.02);
+      });
     } catch (_) {}
+  }
+
+  function patternIndex(pattern, step) {
+    return pattern[step % pattern.length];
   }
 
   function font(size, weight) {
@@ -631,7 +840,7 @@
     // Only seed on a true New Week so Continue / mid-day loads don't re-queue tips
     if (isNewRun) seedTutorialTips();
     sfx("day");
-    startMusic();
+    // Music theme follows state via syncMusic() in update
     saveGame();
   }
 
@@ -879,7 +1088,6 @@
         toast(`Continued — morning of Day ${dayIndex}.`);
       }
       state = "play";
-      startMusic();
       return true;
     } catch (_) {
       return false;
@@ -1085,7 +1293,7 @@
       { now: true }
     );
     pushLog("Anger burst" + (reason ? " after " + reason : "") + ". Lost " + lost + "¢.");
-    sfx("warn");
+    sfx("burst");
     scandals.push("Public outburst day " + dayIndex);
   }
 
@@ -2818,7 +3026,6 @@
     dayEnded = true;
     floaters = [];
     balloons = [];
-    stopMusic();
     sfx("sleep");
     let homeOk = false;
     if (voluntary && inZone(player.x, player.y, getZone("home"), 20)) {
@@ -2972,7 +3179,7 @@
       evening = null;
       state = "results";
       clearSave();
-      sfx("ok");
+      sfx("fanfare");
       banner("ELECTION NIGHT", "#ffb347", 2.5);
       return;
     }
@@ -2986,6 +3193,7 @@
   // ─── Update ──────────────────────────────────────────────────
   function update(dt) {
     animT += dt;
+    syncMusic();
     tickMusic(dt);
     if (msgT > 0) {
       msgT -= dt;
@@ -4207,6 +4415,7 @@
     ctx.font = font(14);
     const lines = [
       `Music: ${musicOn ? "ON" : "OFF"}  (M)   vol ${Math.round(musicVol * 100)}%  ([ ])`,
+      `  bed: intro · title · select · districts · evening · results`,
       `SFX: ${sfxOn ? "ON" : "OFF"}  (S)   vol ${Math.round(sfxVol * 100)}%  (; ')`,
       `Text size: ${textScale > 1 ? "LARGE" : "NORMAL"}  (T)`,
       `Reduce flash: ${reduceFlash ? "ON" : "OFF"}  (F)`,
@@ -4909,8 +5118,12 @@
 
     if (state === "intro") {
       if (e.key === "Enter" || e.key === " " || e.key === "Escape") {
+        ensureAudio(); // unlock Web Audio on first gesture
         skipIntro();
         e.preventDefault();
+      } else {
+        // Any key starts the cold-open bed after browser gesture unlock
+        ensureAudio();
       }
       return;
     }
@@ -4992,8 +5205,11 @@
       }
       if (e.key === "m" || e.key === "M") {
         musicOn = !musicOn;
-        if (musicOn && state === "play") startMusic();
-        else stopMusic();
+        if (!musicOn) stopMusic();
+        else {
+          ensureAudio();
+          syncMusic();
+        }
       }
       if (e.key === "s" || e.key === "S") sfxOn = !sfxOn;
       if (e.key === "t" || e.key === "T") textScale = textScale > 1 ? 1 : 1.15;
@@ -5006,10 +5222,12 @@
       }
       if (e.key === "[") {
         musicVol = clamp(musicVol - 0.1, 0, 1);
+        syncMusic();
         saveSettings();
       }
       if (e.key === "]") {
         musicVol = clamp(musicVol + 0.1, 0, 1);
+        syncMusic();
         saveSettings();
       }
       if (e.key === ";") {
@@ -5044,6 +5262,10 @@
       if (e.key === "m" || e.key === "M") {
         musicOn = !musicOn;
         if (!musicOn) stopMusic();
+        else {
+          ensureAudio();
+          syncMusic();
+        }
         toast(musicOn ? "Music on" : "Music off");
         saveSettings();
       }
@@ -5125,8 +5347,11 @@
       }
       if (e.key === "m" || e.key === "M") {
         musicOn = !musicOn;
-        if (musicOn) startMusic();
-        else stopMusic();
+        if (!musicOn) stopMusic();
+        else {
+          ensureAudio();
+          syncMusic();
+        }
       }
     } else if (state === "pause") {
       if (e.key === "Escape") pauseAction("resume");
@@ -5554,7 +5779,7 @@
     const title = (def && def.title) || label || id;
     banner("★ " + title, "#ffd060", 2.5);
     toast("Achievement: " + title);
-    sfx("ok");
+    sfx("chime");
   }
 
   function checkAchievements() {
