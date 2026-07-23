@@ -1617,12 +1617,18 @@
           adaptive: true,
         };
       }
-      // Clarify "new today" so evening report isn't read as total count
-      return {
-        ...o,
-        label: (o.label || "").replace("more voter groups", "new voter groups today").replace("more voter group", "new voter group today"),
-        short: (o.short || "").replace("voters", "new today").replace("voter", "new today"),
-      };
+      // Data already says "new … today" — only rewrite legacy "more voter…" copy
+      let label = o.label || "";
+      let short = o.short || "";
+      if (/more voter/i.test(label)) {
+        label = label
+          .replace(/more voter groups/i, "new voter groups today")
+          .replace(/more voter group/i, "new voter group today");
+      }
+      if (/more voter/i.test(short)) {
+        short = short.replace(/more voters?/i, "new today");
+      }
+      return { ...o, label, short, target };
     });
   }
   function setObj(id, v) {
