@@ -4011,66 +4011,74 @@
     ctx.fillStyle = dist ? dist.color : "#aaa";
     fitText(dist ? dist.name : "Plaza", 52, 46, 120, "left");
 
-    // stats: axes column (bounded 0–100) then coins right-aligned into the
-    // day chip so large coin counts never paint over St/Do/Ht labels.
-    ctx.font = "bold 10px Cascadia Mono,monospace";
-    ctx.textAlign = "left";
-    ctx.fillStyle = "#80e0a0";
-    ctx.fillText(`St ${axes.street | 0}`, 175, 18);
-    ctx.fillStyle = "#80c0e0";
-    ctx.fillText(`Do ${axes.donor | 0}`, 175, 30);
-    ctx.fillStyle = "#e080a0";
-    ctx.fillText(`Ht ${axes.heat | 0}`, 175, 42);
+    // stats: full axis names (room next to character chip) + coins
+    const axX = 158;
+    const axValX = 252;
+    ctx.font = "bold 11px Cascadia Mono,monospace";
+    const axRows = [
+      { label: "Street", val: axes.street | 0, col: "#80e0a0", y: 18 },
+      { label: "Donor", val: axes.donor | 0, col: "#80c0e0", y: 32 },
+      { label: "Heat", val: axes.heat | 0, col: "#e080a0", y: 46 },
+    ];
+    axRows.forEach((r) => {
+      ctx.textAlign = "left";
+      ctx.fillStyle = r.col;
+      ctx.fillText(r.label, axX, r.y);
+      ctx.textAlign = "right";
+      ctx.fillText(String(r.val), axValX, r.y);
+    });
     ctx.textAlign = "right";
     ctx.font = "bold 14px Cascadia Mono,monospace";
     ctx.fillStyle = "#ffd060";
-    ctx.fillText(`${coins}¢`, 258, 24);
+    ctx.fillText(`${coins}¢`, 292, 24);
 
-    // day index chip
+    // day index chip — full "Day N" (no week-length spoiler)
     ctx.fillStyle = "rgba(255,160,60,0.25)";
-    drawRounded(268, 10, 52, 32, 8);
+    drawRounded(302, 10, 68, 32, 8);
     ctx.fill();
     ctx.fillStyle = "#ffd090";
-    ctx.font = "bold 12px Cascadia Mono,monospace";
+    ctx.font = "bold 13px Cascadia Mono,monospace";
     ctx.textAlign = "center";
-    // Current day only — no "/7" spoiler on the HUD chip
-    ctx.fillText(`D${dayIndex}`, 294, 30);
+    ctx.fillText(`Day ${dayIndex}`, 336, 30);
 
     // day meter
+    const meterX = 380,
+      meterW = 170;
     ctx.fillStyle = "#443058";
-    drawRounded(330, 16, 200, 18, 8);
+    drawRounded(meterX, 16, meterW, 18, 8);
     ctx.fill();
     const dcol = time < 0.55 ? "#ffd060" : time < NIGHT_AT ? "#ff8060" : "#8090ff";
     ctx.fillStyle = dcol;
-    drawRounded(330, 16, 200 * time, 18, 8);
+    drawRounded(meterX, 16, meterW * time, 18, 8);
     ctx.fill();
     ctx.fillStyle = "#fff";
     ctx.font = "bold 11px sans-serif";
     ctx.textAlign = "center";
     const tod = time < 0.3 ? "Morning" : time < 0.55 ? "Midday" : time < 0.75 ? "Afternoon" : time < NIGHT_AT ? "Evening" : "Night";
     const crisisShort = getCrisis().title.split(" ")[0];
-    ctx.fillText(`${tod} · ${crisisShort}`, 430, 29);
+    ctx.fillText(`${tod} · ${crisisShort}`, meterX + meterW / 2, 29);
 
-    // voters
+    // voters — always numerical (icons when recruited)
+    const vCount = voters.length;
     ctx.textAlign = "left";
-    ctx.font = "11px sans-serif";
-    ctx.fillStyle = "#ddd";
-    ctx.fillText("Voters:", 550, 22);
+    ctx.font = "bold 12px Cascadia Mono,monospace";
+    ctx.fillStyle = vCount ? "#d8d0e8" : "#a098b0";
+    ctx.fillText(`Voters: ${vCount}/12`, 568, 24);
     voters.forEach((id, i) => {
+      if (i >= 6) return; // cap icons so we don't overrun Tool price
       const g = VOTER_GROUPS.find((v) => v.id === id);
       if (!g) return;
-      if (!drawSprite("voters/" + id, 592 + i * 26, 22, 22, 22)) {
+      if (!drawSprite("voters/" + id, 568 + i * 22, 30, 18, 18)) {
         ctx.fillStyle = g.color;
         ctx.beginPath();
-        ctx.arc(604 + i * 26, 34, 9, 0, Math.PI * 2);
+        ctx.arc(577 + i * 22, 39, 7, 0, Math.PI * 2);
         ctx.fill();
       }
     });
-    if (!voters.length) {
-      ctx.fillStyle = "#8878a0";
-      ctx.font = "11px sans-serif";
-      ctx.textAlign = "left";
-      ctx.fillText("none yet", 600, 36);
+    if (vCount > 6) {
+      ctx.fillStyle = "#a098b0";
+      ctx.font = "10px sans-serif";
+      ctx.fillText("+" + (vCount - 6), 568 + 6 * 22, 42);
     }
 
     // upgrade / power rank
