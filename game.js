@@ -4397,13 +4397,17 @@
       ctx.font = font(9, "bold");
       ctx.fillText("EVE", calStart + shown * (calW + 4) + 8, calY + 13);
     }
-    // Texture: morning headline ticker under calendar
+    // Texture: morning headline ticker under calendar. Anchored left-of-
+    // center with a capped width so it can't reach the top-right campaign
+    // status box (drawSeasonWeather) regardless of scroll phase or headline
+    // length — it used to span nearly the full canvas width (W-80) centered
+    // near screen-middle and would render straight through that box.
     if (dayHeadline) {
       ctx.fillStyle = "rgba(255,200,120,0.75)";
       ctx.font = font(10);
       ctx.textAlign = "center";
       const scroll = (animT * 28) % (dayHeadline.length * 7 + 200);
-      fitText("📰 " + dayHeadline, W / 2 - scroll * 0.15 + 40, calY + 32, W - 80, "center");
+      fitText("📰 " + dayHeadline, W * 0.4 - scroll * 0.15, calY + 32, 380, "center");
     }
 
     if (!selected) return;
@@ -4734,25 +4738,38 @@
       ctx.fillStyle = tint;
       ctx.fillRect(0, 58, W, H - 58);
     }
-    ctx.fillStyle = "rgba(20,12,30,0.72)";
-    drawRounded(W - 190, 62, 176, 24, 7);
-    ctx.fill();
-    ctx.fillStyle = (season.palette && season.palette[2]) || "#fff";
-    ctx.font = font(10, "bold");
-    ctx.textAlign = "right";
-    ctx.fillText(`${season.name} · ${weather} · ${campaignChapter().name}`, W - 22, 78);
     const districtCondition = campaign.districts[currentDistrict] || (currentDistrict === "plaza" && campaign.districts.market) || 0;
     if (districtCondition) {
       ctx.fillStyle = districtCondition > 0 ? "rgba(90,220,130,0.16)" : "rgba(220,80,80,0.16)";
       ctx.fillRect(0, 58, W, H - 58);
-      ctx.fillStyle = districtCondition > 0 ? "#9af0b0" : "#f0a0a0";
-      ctx.font = font(10, "bold");
-      ctx.fillText(`${currentDistrict.toUpperCase()} CONDITION ${districtCondition > 0 ? "+" : ""}${districtCondition}`, W - 22, 110);
     }
+    // One shared, dynamically-sized box for every top-right status line —
+    // previously the mission/condition lines had no backing at all (bare
+    // text drawn straight onto the game world), and the box only ever
+    // covered the season/weather line's fixed height regardless of how
+    // many lines actually render.
+    const rows = [{ text: `${season.name} · ${weather} · ${campaignChapter().name}`, color: (season.palette && season.palette[2]) || "#fff" }];
     if (chapterMission && !chapterMission.completed) {
-      ctx.font = font(11, "bold");
-      ctx.fillText(`MISSION ${chapterMission.progress}/${chapterMission.steps.length}: ${chapterMission.label}`, W - 22, 96);
+      rows.push({ text: `MISSION ${chapterMission.progress}/${chapterMission.steps.length}: ${chapterMission.label}`, color: "#ffd090" });
     }
+    if (districtCondition) {
+      rows.push({
+        text: `${currentDistrict.toUpperCase()} CONDITION ${districtCondition > 0 ? "+" : ""}${districtCondition}`,
+        color: districtCondition > 0 ? "#9af0b0" : "#f0a0a0",
+      });
+    }
+    const boxW = 210,
+      boxH = 14 + rows.length * 17,
+      boxX = W - boxW - 14,
+      boxY = 62;
+    ctx.fillStyle = "rgba(20,12,30,0.78)";
+    drawRounded(boxX, boxY, boxW, boxH, 7);
+    ctx.fill();
+    ctx.font = font(10, "bold");
+    rows.forEach((row, i) => {
+      ctx.fillStyle = row.color;
+      fitText(row.text, W - 22, boxY + 15 + i * 17, boxW - 16, "right");
+    });
   }
 
   function skipIntro() {
@@ -5354,22 +5371,6 @@
   function drawCredits() {
     ctx.fillStyle = "rgba(10,8,20,0.85)";
     ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = "rgba(30,20,50,0.96)";
-    drawRounded(W / 2 - 260, 60, 520, 420, 14);
-    ctx.fill();
-    ctx.strokeStyle = "#ff9a3c";
-    ctx.lineWidth = 2;
-    drawRounded(W / 2 - 260, 60, 520, 420, 14);
-    ctx.stroke();
-    ctx.textAlign = "center";
-    ctx.fillStyle = "#ffb347";
-    ctx.font = font(22, "bold");
-    ctx.fillText("Credits · " + BUILD_ID, W / 2, 100);
-    ctx.fillStyle = "#fff";
-    ctx.font = font(16, "bold");
-    ctx.fillText("Orange Day: Pocket Republic", W / 2, 140);
-    ctx.fillStyle = "#c8b8d8";
-    ctx.font = font(13);
     const lines = [
       "Cozy satirical civic life-sim",
       "",
@@ -5387,8 +5388,36 @@
       "",
       "Esc / I — close",
     ];
+    // Same fix as Options/Pause: panel size and line spacing follow actual
+    // content and textScale instead of a fixed box — the fixed 20px line
+    // gap didn't grow with LARGE (1.15x) text, so adjacent lines' taller
+    // glyphs visually collided (e.g. "Project author..." overlapping the
+    // line above it).
+    const headerH = 115; // space for title + subtitle above line 1
+    const bottomPad = 20;
+    const lineH = Math.round(20 * textScale);
+    const panelW = 520;
+    const panelH = Math.min(H - 24, headerH + lines.length * lineH + bottomPad);
+    const panelX = W / 2 - panelW / 2;
+    const panelY = Math.max(12, (H - panelH) / 2);
+    ctx.fillStyle = "rgba(30,20,50,0.96)";
+    drawRounded(panelX, panelY, panelW, panelH, 14);
+    ctx.fill();
+    ctx.strokeStyle = "#ff9a3c";
+    ctx.lineWidth = 2;
+    drawRounded(panelX, panelY, panelW, panelH, 14);
+    ctx.stroke();
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#ffb347";
+    ctx.font = font(22, "bold");
+    ctx.fillText("Credits · " + BUILD_ID, W / 2, panelY + 40);
+    ctx.fillStyle = "#fff";
+    ctx.font = font(16, "bold");
+    ctx.fillText("Orange Day: Pocket Republic", W / 2, panelY + 80);
+    ctx.fillStyle = "#c8b8d8";
+    ctx.font = font(13);
     lines.forEach((line, i) => {
-      ctx.fillText(line, W / 2, 175 + i * 20);
+      ctx.fillText(line, W / 2, panelY + headerH + i * lineH);
     });
   }
 
@@ -5479,9 +5508,13 @@
       });
     }
     if (e.atRisk && e.atRisk.length) {
+      // Was a fixed y=430 regardless of how many voters are in the list
+      // above it — with 9+ recruited (up to 12 max) the list grows tall
+      // enough to run straight into this line.
+      const atRiskY = 248 + Math.max(1, e.voters.length) * 20 + 14;
       ctx.fillStyle = "#e0a080";
       ctx.font = "11px Segoe UI,sans-serif";
-      fitText(`At risk (<40 loyalty): ${e.atRisk.length} — Heat & spats matter`, 560, 430, 340, "left");
+      fitText(`At risk (<40 loyalty): ${e.atRisk.length} — Heat & spats matter`, 560, atRiskY, 340, "left");
     }
 
     if (e.debateDone) {
