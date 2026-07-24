@@ -131,8 +131,8 @@
   let reduceFlash = false;
   let showOptions = false;
   let showCredits = false;
-  const BUILD_ID = "v1.3";
-  const DRAFT_LABEL = "Election Season";
+  const BUILD_ID = "v1.4";
+  const DRAFT_LABEL = "Seasonal Civic Career";
   let ngPlusBonus = 0; // soft NG+ coins from last strong week
   const SETTINGS_KEY = "orangeDay_settings_v1";
   const ACHIEVE_KEY = "orangeDay_achieve_v1";
@@ -293,12 +293,12 @@
   /** Theme master gain targets (before musicVol). */
   function themeMasterLevel(theme) {
     const base = {
-      intro: 0.045,
-      title: 0.05,
-      select: 0.042,
-      play: 0.048,
-      evening: 0.04,
-      results: 0.055,
+      intro: 0.22,
+      title: 0.25,
+      select: 0.21,
+      play: 0.24,
+      evening: 0.2,
+      results: 0.27,
     };
     let lv = (base[theme] || 0.045) * musicVol;
     if (state === "pause" && theme === "play") lv *= 0.45; // duck under pause menu
@@ -310,6 +310,7 @@
     if (state === "intro") return "intro";
     if (state === "title") return "title";
     if (state === "select") return "select";
+    if (state === "chapter") return chapterPhase === "decision" ? "evening" : "select";
     if (state === "evening") return "evening";
     if (state === "results") return "results";
     if (state === "play" || state === "pause") return "play";
@@ -411,10 +412,10 @@
     }
     if (!musicNodes || musicTheme !== want) {
       startMusic(want);
-      musicSyncKey = want + "|" + state + "|" + (currentDistrict || "") + "|" + musicVol;
+      musicSyncKey = want + "|" + state + "|" + (currentDistrict || "") + "|" + campaignMusicKey() + "|" + musicVol;
       return;
     }
-    const key = want + "|" + state + "|" + (want === "play" ? currentDistrict || "" : "") + "|" + musicVol;
+    const key = want + "|" + state + "|" + (want === "play" ? currentDistrict || "" : "") + "|" + campaignMusicKey() + "|" + musicVol;
     if (key === musicSyncKey) return;
     musicSyncKey = key;
     // Live duck / volume / district pad when something actually changed
@@ -460,9 +461,11 @@
           donor: [0, 4, 2, 5, 3, 4, 1, 0],
         };
         const d = currentDistrict || "plaza";
+        const seasonShift = { winter: 0.84, spring: 1.06, summer: 1.18, fall: 0.94 }[(campaign && campaign.season) || ""] || 1;
+        const chapterShift = 1 + (((campaign && campaign.chapter) || 0) % 4) * 0.025;
         spec = {
           pace: distPace,
-          scale: scales[d] || scales.plaza,
+          scale: (scales[d] || scales.plaza).map((note) => note * seasonShift * chapterShift),
           pattern: patterns[d] || patterns.plaza,
           type: d === "media" ? "triangle" : d === "donor" ? "triangle" : "sine",
           peak: 0.1 * (d === "plaza" ? 1 : 1.12),
@@ -538,6 +541,8 @@
   const CLUTTER = _D.CLUTTER;
   const NPCS = _D.NPCS;
   const BUTTON_SPOTS = _D.BUTTON_SPOTS;
+  const CAMPAIGN_SEASONS = _D.CAMPAIGN_SEASONS || {};
+  const CAMPAIGN_CHAPTERS = _D.CAMPAIGN_CHAPTERS || [];
   if (!CHARACTERS || !ZONES) {
     console.error("ORANGE_DATA missing — load data.js before game.js");
   }
@@ -546,7 +551,7 @@
   // ─── State ───────────────────────────────────────────────────
   const keys = Object.create(null);
   let touchMove = { x: 0, y: 0 };
-  let state = "intro"; // intro | title | select | play | pause | evening | results
+  let state = "intro"; // intro | title | select | chapter | play | pause | evening | results
   let introT = 0; // seconds into cold-open
   const INTRO_DUR = 5.5; // auto-advance to title
   let charIdx = 0;
@@ -585,6 +590,9 @@
   let toastQueue = []; // sequential toasts — no more clobbering mid-errand
   let pendingBurst = null; // defer anger burst until dialogue ends
   let log = [];
+  let conversationLog = [];
+  let heardNpcLines = {};
+  let showConversations = false;
   let objProg = {};
   let voters = []; // recruited group ids
   let voterLoyalty = {};
@@ -639,6 +647,178 @@
   let lastInteract = 0;
   let seedFlags = {};
   let titleFocus = "new"; // new | continue
+  let campaign = null;
+  let chapterPhase = "intro"; // intro | decision | exit
+  let chapterDecisionIndex = 0;
+  let chapterChoice = 0;
+  let chapterMission = null;
+  const chapterPad = { up: false, down: false, confirm: false };
+
+  const CHAPTER_MISSIONS = {
+    election: { label: "Recover the permit and face the civic stage", steps: ["mailbox", "mayor", "stage"], readiness: 0 },
+    festival: { label: "Prepare the route and find the mascot", steps: ["stage", "park"], readiness: 0 },
+    championship: { label: "Ready the venue and welcome the crowd", steps: ["stage", "booth"], readiness: 0 },
+    storm: { label: "Stock supplies, open shelter, evacuate home", steps: ["coffee", "park", "home"], readiness: 4 },
+    recovery: { label: "Deliver supplies and approve repairs", steps: ["park", "crate", "mayor"], readiness: 2 },
+    budget: { label: "Hear residents and file the civic budget", steps: ["board", "mayor"], readiness: 0 },
+    reelection: { label: "Present the record and return to voters", steps: ["booth", "stage", "home"], readiness: 0 },
+  };
+
+  function calendarSeason() {
+    const m = new Date().getMonth();
+    return m <= 1 || m === 11 ? "winter" : m <= 4 ? "spring" : m <= 7 ? "summer" : "fall";
+  }
+
+  function newCampaign(season) {
+    const key = CAMPAIGN_SEASONS[season] ? season : calendarSeason();
+    const loyalty = {};
+    VOTER_GROUPS.forEach((v) => (loyalty[v.id] = 50));
+    ["families", "business", "fans", "street"].forEach((id) => (loyalty[id] = 50));
+    return {
+      season: key,
+      chapter: 0,
+      loyalty,
+      infrastructure: 0,
+      readiness: 0,
+      rescues: 0,
+      promises: {},
+      districts: {},
+      decisions: [],
+      weeks: 0,
+      electionWins: 0,
+      electionLosses: 0,
+      inOffice: true,
+      complete: false,
+    };
+  }
+
+  function campaignChapter() {
+    return CAMPAIGN_CHAPTERS[(campaign && campaign.chapter) || 0] || CAMPAIGN_CHAPTERS[0] || null;
+  }
+
+  function campaignSeason() {
+    return CAMPAIGN_SEASONS[(campaign && campaign.season) || calendarSeason()] || {};
+  }
+
+  function campaignMaxDays() {
+    const chapter = campaignChapter();
+    return chapter ? chapter.days || MAX_DAYS : MAX_DAYS;
+  }
+
+  function campaignMusicKey() {
+    const chapter = campaignChapter();
+    const season = campaignSeason();
+    return (chapter && chapter.music) || season.music || "campaign_plaza";
+  }
+
+  function campaignView() {
+    const chapter = campaignChapter();
+    return campaign && {
+      season: campaign.season,
+      chapterIndex: campaign.chapter,
+      chapterId: chapter && chapter.id,
+      role: campaign.inOffice ? (chapter && chapter.role) : "Opposition Organizer",
+      inOffice: campaign.inOffice,
+      status: campaign.complete ? "complete" : "active",
+      loyalty: { ...campaign.loyalty },
+      infrastructure: campaign.infrastructure,
+      readiness: campaign.readiness,
+      rescues: campaign.rescues,
+      eventHistory: campaign.decisions.slice(),
+      mission: chapterMissionView(),
+    };
+  }
+
+  function chapterMissionView() {
+    return chapterMission && {
+      chapter: chapterMission.chapter,
+      id: chapterMission.id,
+      label: chapterMission.label,
+      steps: chapterMission.steps.slice(),
+      target: chapterMission.steps.length,
+      progress: chapterMission.progress,
+      completed: chapterMission.completed,
+      success: chapterMission.success,
+      failed: chapterMission.failed,
+      finishedDay: chapterMission.finishedDay,
+    };
+  }
+
+  function initChapterMission() {
+    const chapter = campaignChapter();
+    const spec = chapter && CHAPTER_MISSIONS[chapter.id];
+    chapterMission = spec ? {
+      chapter: chapter.id,
+      id: `${chapter.id}-fieldwork`,
+      label: spec.label,
+      steps: spec.steps.slice(),
+      readiness: spec.readiness,
+      progress: 0,
+      completed: false,
+      success: null,
+      failed: false,
+      finishedDay: null,
+    } : null;
+    return chapterMissionView();
+  }
+
+  function progressChapterMission(zoneId) {
+    if (!chapterMission || chapterMission.completed || chapterMission.failed) return false;
+    if (chapterMission.steps[chapterMission.progress] !== zoneId) return false;
+    chapterMission.progress += 1;
+    chapterMission.completed = chapterMission.progress >= chapterMission.steps.length;
+    if (chapterMission.completed) {
+      chapterMission.finishedDay = dayIndex;
+      toast(`Chapter mission complete: ${chapterMission.label}.`);
+      pushLog(`Completed ${chapterMission.label}.`);
+      if (campaign) campaign.readiness += 1;
+    } else {
+      toast(`Mission ${chapterMission.progress}/${chapterMission.steps.length}: next stop ${chapterMission.steps[chapterMission.progress].toUpperCase()}.`);
+    }
+    return true;
+  }
+
+  function finalizeChapterMission() {
+    if (!chapterMission) return null;
+    if (chapterMission.success != null) return chapterMissionView();
+    const preparation = (campaign ? campaign.readiness : 0) + Math.floor((campaign ? campaign.infrastructure : 0) / 6);
+    const onTime = chapterMission.finishedDay != null && chapterMission.finishedDay <= campaignMaxDays();
+    chapterMission.success = chapterMission.completed && onTime && preparation >= chapterMission.readiness;
+    chapterMission.failed = !chapterMission.success;
+    if (campaign) {
+      adjustCampaignLoyalty("families", chapterMission.success ? 4 : -5);
+      adjustCampaignLoyalty("policy", chapterMission.success ? 3 : -4);
+      if (chapterMission.success) campaign.infrastructure += 1;
+    }
+    return chapterMissionView();
+  }
+
+  function currentCampaignWeather() {
+    const season = campaignSeason();
+    const names = season.weather || ["clear"];
+    const name = names[(dayIndex - 1) % names.length] || "clear";
+    const harsh = /snow|ice|rain|flood|heat|thunder|wind/.test(name);
+    const protection = Math.min(0.18, ((campaign && campaign.readiness) || 0) * 0.015 + ((campaign && campaign.infrastructure) || 0) * 0.005);
+    return { name, movement: harsh ? Math.min(1, 0.78 + protection) : 1, time: harsh ? Math.min(1, 0.88 + protection) : 1 };
+  }
+
+  function setCampaignDaySeconds() {
+    DAY_SECONDS_BASE = DAY_LENGTHS[dayLengthMode] || DAY_LENGTHS.normal;
+    const season = campaignSeason();
+    const daylight = season.daylight || [1];
+    const seasonMult = daylight[Math.min(daylight.length - 1, Math.floor(((campaign && campaign.chapter) || 0) / 2))] || 1;
+    const chapter = campaignChapter();
+    const chapterMult =
+      chapter && chapter.dayLength === "short-crisis" ? 0.72 :
+      chapter && (chapter.dayLength === "long-evening" || chapter.dayLength === "event-night") ? 1.18 :
+      chapter && chapter.dayLength === "adaptive-damage" ? clamp(1.12 - ((campaign && campaign.infrastructure) || 0) * 0.01, 0.82, 1.12) : 1;
+    const civicCapacity = 1 + Math.min(0.12, ((campaign && campaign.infrastructure) || 0) * 0.006);
+    const kept = campaign ? Object.values(campaign.promises || {}).filter((v) => v === "kept").length : 0;
+    const broken = campaign ? Object.values(campaign.promises || {}).filter((v) => v === "broken").length : 0;
+    const promiseTrust = clamp(1 + kept * 0.01 - broken * 0.02, 0.9, 1.08);
+    DAY_SECONDS = Math.round(DAY_SECONDS_BASE * seasonMult * chapterMult * civicCapacity * promiseTrust * currentCampaignWeather().time);
+    return DAY_SECONDS;
+  }
 
   function getCrisis() {
     return CRISES.find((c) => c.day === dayIndex) || CRISES[0];
@@ -705,7 +885,8 @@
   }
 
   /** Fresh run from character select */
-  function resetRun(char) {
+  function resetRun(char, keepCampaign = false) {
+    if (!keepCampaign || !campaign) campaign = newCampaign();
     selected = char;
     dayIndex = 1;
     coins = 12 + (ngPlusBonus || 0); // v1.3: slightly friendlier start + soft NG+
@@ -762,13 +943,16 @@
     results = null;
     evening = null;
     log = ngPlusBonus ? ["Soft NG+: +" + ngPlusBonus + "¢ from last strong week."] : [];
+    conversationLog = [];
+    heardNpcLines = {};
+    showConversations = false;
+    initChapterMission();
     beginDay(true);
   }
 
   /** Start or resume a calendar day (keeps meta progress) */
   function beginDay(isNewRun) {
-    DAY_SECONDS_BASE = DAY_LENGTHS[dayLengthMode] || DAY_LENGTHS.normal;
-    DAY_SECONDS = DAY_SECONDS_BASE;
+    setCampaignDaySeconds();
     resetPlayerPos();
     currentDistrict = "plaza";
     spawnAmbient();
@@ -850,6 +1034,8 @@
   function serializeRun() {
     return {
       v: 2,
+      campaign: campaign ? JSON.parse(JSON.stringify(campaign)) : null,
+      chapterMission: chapterMission ? JSON.parse(JSON.stringify(chapterMission)) : null,
       dayIndex,
       coins,
       rep,
@@ -872,6 +1058,8 @@
       debateWon,
       charId: selected && selected.id,
       log: log.slice(0, 12),
+      conversationLog: conversationLog.slice(0, 24),
+      heardNpcLines: { ...heardNpcLines },
       midDay: state === "play" && !dayEnded,
       time,
       daySec,
@@ -995,11 +1183,14 @@
       }
       if (!raw) return false;
       const data = JSON.parse(raw);
+      campaign = data.campaign || newCampaign();
+      chapterMission = data.chapterMission || null;
+      if (!chapterMission) initChapterMission();
       const char = CHARACTERS.find((c) => c.id === data.charId);
       if (!char) return false;
       selected = char;
       charIdx = CHARACTERS.indexOf(char);
-      dayIndex = clamp(data.dayIndex || 1, 1, MAX_DAYS);
+      dayIndex = clamp(data.dayIndex || 1, 1, campaignMaxDays());
       coins = data.coins | 0;
       axes = data.axes || { street: data.rep || 0, donor: Math.floor((data.rep || 0) * 0.5), heat: 0 };
       rep = data.rep | 0;
@@ -1028,6 +1219,8 @@
       debateDone = !!data.debateDone;
       debateWon = !!data.debateWon;
       log = Array.isArray(data.log) ? data.log.slice() : [];
+      conversationLog = Array.isArray(data.conversationLog) ? data.conversationLog.slice() : [];
+      heardNpcLines = data.heardNpcLines || {};
       sfxOn = data.sfxOn !== false;
       musicOn = data.musicOn !== false;
       if (typeof data.sfxVol === "number") sfxVol = data.sfxVol;
@@ -1297,6 +1490,16 @@
     log.unshift(t);
     if (log.length > 8) log.pop();
   }
+  function rememberNpcLine(n, line) {
+    if (!n || !line) return;
+    const key = n.id + "|" + line;
+    if (heardNpcLines[key]) return;
+    heardNpcLines[key] = true;
+    const entry = `Day ${dayIndex} · ${n.name}: ${line}`;
+    conversationLog.unshift(entry);
+    if (conversationLog.length > 24) conversationLog.pop();
+    pushLog(entry);
+  }
   function floatText(x, y, text, color = "#fff") {
     floaters.push({ x, y, text, color, life: 1.4 });
   }
@@ -1408,6 +1611,7 @@
       return;
     }
     const name = n ? n.name : "???";
+    rememberNpcLine(n, line);
     toast(name + ": " + line, 4.5, { now: true });
     if (n) balloon(n.x, n.y - 40, line.length > 42 ? line.slice(0, 40) + "…" : line, 3.2);
     sfx("blip");
@@ -1976,6 +2180,7 @@
 
     if (hit.type === "zone") {
       useZone(hit.ref);
+      progressChapterMission(hit.ref.id);
     }
   }
 
@@ -2017,10 +2222,72 @@
     noteEaster("pigeon", true); // secret: Pip the Civic
   }
 
+  function npcContextLine(id, opts = {}) {
+    const n = NPCS.find((npc) => npc.id === id);
+    const c = n && n.contextLines;
+    if (!c) return "";
+    const defs = c.defaults || {};
+    const chapterId = opts.chapter || (campaignChapter() && campaignChapter().id);
+    const seasonId = opts.season || (campaign && campaign.season);
+    const outcome = opts.outcome;
+    return (
+      (outcome && c[outcome]) ||
+      (outcome && defs.outcome && defs.outcome[outcome]) ||
+      c.chapter ||
+      (defs.chapter && defs.chapter[chapterId]) ||
+      (defs.season && defs.season[seasonId]) ||
+      ""
+    );
+  }
+
+  function attemptCampaignComeback() {
+    if (!campaign) return null;
+    const values = Object.values(campaign.loyalty || {});
+    const average = values.length ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+    if (!campaign.inOffice && average >= 45) {
+      campaign.inOffice = true;
+      campaign.electionWins += 1;
+      pushLog("Civic comeback: organizing rebuilt a governing majority.");
+      saveGame();
+    }
+    return campaignView();
+  }
+
   function talkNpc(n) {
+    const campaignLines = () => {
+      const c = n.contextLines;
+      if (!c || !campaign) return [];
+      const defs = c.defaults || {};
+      const chapter = campaignChapter();
+      const loyaltyValues = Object.values(campaign.loyalty || {});
+      const avg = loyaltyValues.length ? loyaltyValues.reduce((a, b) => a + b, 0) / loyaltyValues.length : 50;
+      const outcome = chapterMission && chapterMission.success != null ? (chapterMission.success ? "success" : "failure") : null;
+      return [
+        outcome && c[outcome],
+        outcome && defs.outcome && defs.outcome[outcome],
+        c.chapter,
+        defs.chapter && chapter && defs.chapter[chapter.id],
+        defs.season && defs.season[campaign.season],
+        defs.loyalty && defs.loyalty[avg < 40 ? "low" : avg > 65 ? "high" : ""],
+      ].filter(Boolean);
+    };
+    const dayLine = (fallback) => {
+      const contextual = campaignLines().find((line) => !heardNpcLines[n.id + "|" + line]);
+      if (contextual) return contextual;
+      const daily = Array.isArray(n.dayLines) ? n.dayLines[(dayIndex - 1) % n.dayLines.length] : n.dayLines && n.dayLines[dayIndex];
+      if (daily && !heardNpcLines[n.id + "|" + daily]) return daily;
+      const alternatives = [fallback].concat((n.lines && n.lines.rants) || []).filter(Boolean);
+      return alternatives.find((line) => !heardNpcLines[n.id + "|" + line]) || daily || fallback;
+    };
     const say = (line) => {
+      rememberNpcLine(n, line);
       toast(line);
       balloon(n.x, n.y - 38, line, 2.8);
+      const context = campaignLines().find((text) => text !== line && !heardNpcLines[n.id + "|" + text]);
+      if (context) {
+        rememberNpcLine(n, context);
+        toast(`${n.name}: ${context}`, 4);
+      }
       sfx("blip");
     };
 
@@ -2034,11 +2301,15 @@
         return;
       }
       catLadyDay = dayIndex;
-      startDialogue("catlady", n.lines.monologue || [n.lines.default], {
+      const stories = n.lines.monologues || [n.lines.monologue || [n.lines.default]];
+      const context = campaignLines().find((text) => !heardNpcLines[n.id + "|" + text]);
+      const story = stories[(dayIndex - 1) % stories.length].slice();
+      if (context) story.unshift(context);
+      startDialogue("catlady", story, {
         angerPer: day1Soft ? 1 : 3,
-        timePer: DAY_SECONDS * (day1Soft ? 0.02 : 0.04),
+        timePer: DAY_SECONDS * (day1Soft ? 0.015 : 0.025),
         onDone: () => {
-          addAnger(day1Soft ? 3 : 6, "Clara monologue");
+          addAnger(day1Soft ? 2 : 4, "Clara monologue");
           toast(
             day1Soft
               ? "Clara pauses. Lesson learned: 💢 composure rises near her."
@@ -2055,7 +2326,7 @@
         return;
       }
       karenDay = dayIndex;
-      const rant = (n.lines.rants && n.lines.rants[Math.floor(Math.random() * n.lines.rants.length)]) || n.lines.default;
+      const rant = dayLine((n.lines.rants && n.lines.rants[Math.floor(Math.random() * n.lines.rants.length)]) || n.lines.default);
       say(rant);
       const karAnger = day1Soft ? 6 : 12;
       addAnger(karAnger, "HOA Karen");
@@ -2124,7 +2395,7 @@
         evaluateMilestones(true);
         return;
       }
-      say(n.lines.default);
+      say(dayLine(n.lines.default));
       return;
     }
 
@@ -2303,7 +2574,7 @@
       addAxes({ heat: 1 });
       bumpFavor("chaos", 1);
       bumpFavor("patriots", 1);
-      say(n.lines.chaos || n.lines.default);
+      say(dayLine(n.lines.chaos || n.lines.default));
       if (voters.includes("wine")) {
         voterLoyalty.wine = Math.max(15, (voterLoyalty.wine || 50) - 8);
         pushLog("Wine Moms side-eye the spectacle.");
@@ -2322,7 +2593,7 @@
       bumpFavor("wine", 1);
       if ((axes.heat || 0) < 25) bumpFavor("lawn", 1);
       else toast("Lawn Guardians side-eye your Heat. Cool off before park rounds count.");
-      say(n.lines.wine || n.lines.default);
+      say(dayLine(n.lines.wine || n.lines.default));
       // Spat recon available at park
       if (spatCount > 0 && reconDay !== dayIndex) {
         toast("Tip: E again or pay 8¢ here to cool a spat (reconciliation).");
@@ -2333,7 +2604,7 @@
 
     if (n.id === "watchdog") {
       showObj = true;
-      if (n.dayLines && n.dayLines[dayIndex]) say(n.dayLines[dayIndex]);
+      if (n.dayLines) say(dayLine(n.lines.default));
       else if (!hasPermit && !permitDelivered) say("LOST PERMIT near the Oversized Mailbox.");
       else say(n.lines.default);
       // Board thrice is the austere errand path
@@ -2343,7 +2614,7 @@
 
     if (n.id === "anchor") {
       bumpObj("media", 1);
-      if (n.dayLines && n.dayLines[dayIndex]) say(n.dayLines[dayIndex]);
+      if (n.dayLines) say(dayLine(n.lines.default));
       else say(n.lines.default);
       bumpFavor("patriots", 1);
       bumpFavor("chaos", 1);
@@ -2355,7 +2626,7 @@
         runScandalLeak();
         return;
       }
-      if (n.dayLines && n.dayLines[dayIndex]) say(n.dayLines[dayIndex]);
+      if (n.dayLines) say(dayLine(n.lines.default));
       else say(n.lines.default);
       bumpFavor("conspiracy", 1);
       return;
@@ -2366,7 +2637,7 @@
         runUnionMarch();
         return;
       }
-      if (n.dayLines && n.dayLines[dayIndex]) say(n.dayLines[dayIndex]);
+      if (n.dayLines) say(dayLine(n.lines.default));
       else say(n.lines.default);
       bumpFavor("students", 1);
       bumpFavor("lawn", 1);
@@ -2378,14 +2649,13 @@
         runDonorGala();
         return;
       }
-      if (n.dayLines && n.dayLines[dayIndex]) say(n.dayLines[dayIndex]);
+      if (n.dayLines) say(dayLine(n.lines.default));
       else say(n.lines.default);
       bumpFavor("donors", 1);
       return;
     }
 
-    if (n.dayLines && n.dayLines[dayIndex]) say(n.dayLines[dayIndex]);
-    else say(n.lines.default || "…");
+    say(dayLine(n.lines.default || "…"));
   }
 
   function runScandalLeak() {
@@ -3115,6 +3385,136 @@
     saveGame();
   }
 
+  function adjustCampaignLoyalty(id, delta) {
+    if (!campaign) campaign = newCampaign();
+    campaign.loyalty[id] = clamp((campaign.loyalty[id] == null ? 50 : campaign.loyalty[id]) + (delta || 0), 0, 100);
+    return campaign.loyalty[id];
+  }
+
+  function resolveCampaignEvent(eventId, choiceIndex = 0, success = true) {
+    const chapter = campaignChapter();
+    const decision = chapter && (chapter.decisions || []).find((d) => d.id === eventId);
+    if (!decision) return false;
+    const idx = clamp(choiceIndex | 0, 0, Math.max(0, decision.options.length - 1));
+    const option = decision.options[idx];
+    const scale = success === false ? -0.5 : 1;
+    Object.entries(option.loyalty || {}).forEach(([id, delta]) => adjustCampaignLoyalty(id, Math.round(delta * scale)));
+    if (option.infrastructure) campaign.infrastructure = Math.max(0, campaign.infrastructure + Math.round(option.infrastructure * scale));
+    if (option.readiness) campaign.readiness = Math.max(0, campaign.readiness + Math.round(option.readiness * scale));
+    if (option.rescue && success !== false) campaign.rescues += 1;
+    if (option.promise) campaign.promises[option.promise] = success !== false ? "kept" : "broken";
+    Object.entries(option.district || {}).forEach(([id, delta]) => {
+      campaign.districts[id] = (campaign.districts[id] || 0) + Math.round(delta * scale);
+    });
+    if (option.heat) addAxes({ heat: Math.round(option.heat * scale) });
+    campaign.decisions.push({
+      chapter: chapter.id,
+      event: eventId,
+      choice: idx,
+      text: option.text,
+      success: success !== false,
+    });
+    const loyaltyReport = Object.entries(option.loyalty || {})
+      .map(([id, delta]) => `${id} ${Math.round(delta * scale) >= 0 ? "+" : ""}${Math.round(delta * scale)}`)
+      .join(", ");
+    const report = `${chapter.name}: ${option.text}${loyaltyReport ? ` (${loyaltyReport})` : ""}.`;
+    pushLog(report);
+    toast(report, 4.5);
+    saveGame();
+    return true;
+  }
+
+  function recordCampaignWeek(outcome) {
+    if (!campaign) return;
+    campaign.weeks += 1;
+    voters.forEach((id) => adjustCampaignLoyalty(id, Math.round(((voterLoyalty[id] || 50) - 50) / 8)));
+    const average = Object.values(campaign.loyalty).reduce((sum, n) => sum + n, 0) / Math.max(1, Object.keys(campaign.loyalty).length);
+    const won = average >= 38 && (!outcome || outcome.id !== "E5");
+    const wasInOffice = campaign.inOffice;
+    if (won) campaign.electionWins += 1;
+    else campaign.electionLosses += 1;
+    campaign.inOffice = won;
+    if (won && !wasInOffice) {
+      banner("CIVIC COMEBACK", "#80e0a0", 2.5);
+      toast("Your organizing rebuilt enough loyalty to return to office.");
+      pushLog("Civic comeback: opposition organizing became a governing majority.");
+    } else if (!won && wasInOffice) {
+      toast("You lose office, but the campaign continues from the opposition.");
+      pushLog("Lost office; continued as Opposition Organizer.");
+    }
+  }
+
+  function beginChapterIntro() {
+    chapterPhase = "intro";
+    chapterDecisionIndex = 0;
+    chapterChoice = 0;
+    state = "chapter";
+    stopMusic();
+  }
+
+  function chapterControl(action) {
+    if (state !== "chapter") return { phase: chapterPhase, choice: chapterChoice, decisionIndex: chapterDecisionIndex, state };
+    const chapter = campaignChapter();
+    const decision = chapter && (chapter.decisions || [])[chapterDecisionIndex];
+    const n = decision ? decision.options.length : 0;
+    if (chapterPhase === "decision" && n && action === "up") chapterChoice = (chapterChoice + n - 1) % n;
+    else if (chapterPhase === "decision" && n && action === "down") chapterChoice = (chapterChoice + 1) % n;
+    else if (action === "confirm") advanceCampaignChapter();
+    return { phase: chapterPhase, choice: chapterChoice, decisionIndex: chapterDecisionIndex, state };
+  }
+
+  function pollChapterGamepad() {
+    if (state !== "chapter" || typeof navigator === "undefined" || !navigator.getGamepads) return;
+    try {
+      const pad = Array.from(navigator.getGamepads()).find(Boolean);
+      if (!pad) return;
+      const up = !!(pad.buttons[12] && pad.buttons[12].pressed) || (pad.axes[1] || 0) < -0.55;
+      const down = !!(pad.buttons[13] && pad.buttons[13].pressed) || (pad.axes[1] || 0) > 0.55;
+      const confirm = !!(pad.buttons[0] && pad.buttons[0].pressed);
+      if (up && !chapterPad.up) chapterControl("up");
+      if (down && !chapterPad.down) chapterControl("down");
+      if (confirm && !chapterPad.confirm) chapterControl("confirm");
+      chapterPad.up = up;
+      chapterPad.down = down;
+      chapterPad.confirm = confirm;
+    } catch (_) {}
+  }
+
+  function advanceCampaignChapter() {
+    if (!campaign) return false;
+    if (chapterPhase === "intro") {
+      state = "play";
+      syncMusic();
+      return true;
+    }
+    const chapter = campaignChapter();
+    const decisions = (chapter && chapter.decisions) || [];
+    if (chapterPhase === "decision" && chapterDecisionIndex < decisions.length) {
+      const missionResult = chapterMission && chapterMission.success;
+      resolveCampaignEvent(decisions[chapterDecisionIndex].id, chapterChoice, missionResult !== false);
+      chapterDecisionIndex += 1;
+      chapterChoice = 0;
+      if (chapterDecisionIndex < decisions.length) return true;
+      chapterPhase = "exit";
+      return true;
+    }
+    if (chapterPhase === "exit") {
+      if (campaign.chapter >= CAMPAIGN_CHAPTERS.length - 1) {
+        campaign.complete = true;
+        saveGame();
+        state = "title";
+        return true;
+      }
+      campaign.chapter += 1;
+      const char = selected;
+      resetRun(char, true);
+      beginChapterIntro();
+      saveGame();
+      return true;
+    }
+    return false;
+  }
+
   function endDay(voluntary) {
     if (dayEnded) return;
     dayEnded = true;
@@ -3201,7 +3601,7 @@
       state = "play";
       return;
     }
-    if (dayIndex >= MAX_DAYS) {
+    if (dayIndex >= campaignMaxDays()) {
       // Election Night → final results
       const outcome = civicOutcome();
       results = {
@@ -3220,7 +3620,7 @@
         objectives: evening.objectives,
         upgraded,
         character: selected.name,
-        days: MAX_DAYS,
+        days: campaignMaxDays(),
         debateWon,
         electionNight: true,
         codexCount: Object.keys(codexSeen).length,
@@ -3249,12 +3649,14 @@
         }
       } catch (_) {}
       checkAchievements();
-      if (dayIndex >= MAX_DAYS) unlockAchieve("week_clear", "Election Week Cleared");
+      if (dayIndex >= campaignMaxDays()) unlockAchieve("week_clear", "Civic Chapter Cleared");
       if (outcome && outcome.id === "E1") unlockAchieve("ending_e1", "Ending: Civic Darling");
       if (outcome && outcome.id === "E4") unlockAchieve("ending_e4", "Ending: Money Machine");
       // Account meta + cast unlocks (milestones)
       const coalObj = activeCoalition();
       recordWeekClear(outcome, coalitionLabel(), coalObj ? coalObj.id : null);
+      recordCampaignWeek(outcome);
+      finalizeChapterMission();
       // remember best ending (by axis sum)
       try {
         const score = (axes.street || 0) + (axes.donor || 0) - (axes.heat || 0) * 0.5 + voters.length;
@@ -3272,7 +3674,7 @@
       } catch (_) {}
       evening = null;
       state = "results";
-      clearSave();
+      saveGame();
       sfx("fanfare");
       banner("ELECTION NIGHT", "#ffb347", 2.5);
       return;
@@ -3297,6 +3699,7 @@
     }
     interactFlash = Math.max(0, interactFlash - dt);
     rallyT = Math.max(0, rallyT - dt);
+    pollChapterGamepad();
 
     // Cat Lady auto-ambush: walk near her once/day → stuck monologue
     // Day 1: wait until mid-morning so first errands aren't ambushed
@@ -3415,6 +3818,9 @@
       }
     }
     let spd = selected.speed * (toolLevel > 0 ? 1.08 : 1);
+    spd *= currentCampaignWeather().movement;
+    const districtCondition = campaign && (campaign.districts[currentDistrict] || (currentDistrict === "plaza" && campaign.districts.market) || 0);
+    spd *= clamp(1 + districtCondition * 0.01, 0.85, 1.15);
     if (selected.id === "mayor" && orderUsed) spd *= 0.95;
     if (rallyT > 0 && selected.id === "alex") spd *= 1.1 + powerRank * 0.03;
     if (selected.id === "bernie") spd *= coffeeFixed || redistribT > 0 ? 1.12 : 0.9;
@@ -3986,7 +4392,7 @@
       ctx.textAlign = "center";
       ctx.fillText(String(d), x + calW / 2, calY + 13);
     }
-    if (dayIndex >= MAX_DAYS) {
+    if (dayIndex >= campaignMaxDays()) {
       ctx.fillStyle = "#ffb347";
       ctx.font = font(9, "bold");
       ctx.fillText("EVE", calStart + shown * (calW + 4) + 8, calY + 13);
@@ -4105,68 +4511,107 @@
 
     // objectives panel
     if (showObj) {
-      const objs = currentObjectives();
+      const inCampaign = !!campaign;
+      const chapter = inCampaign ? campaignChapter() : null;
+      // DAILY_OBJECTIVES below is written entirely around Election Week's
+      // narrative (permit/coffee/debate/scandal/march/gala) — only show it
+      // where that's still true. Every other chapter gets the compact
+      // mission panel instead, which is the only objective-shaped UI those
+      // chapters had until now.
+      const showDailyDetail = !inCampaign || (chapter && chapter.id === "election");
       const ox = 12,
-        oy = 64,
         ow = 300;
-      const rows = objs.length;
-      const oh = 28 + rows * 20;
-      ctx.fillStyle = "rgba(20,12,30,0.78)";
-      drawRounded(ox, oy, ow, oh, 8);
-      ctx.fill();
-      ctx.strokeStyle = "rgba(255,160,60,0.4)";
-      ctx.stroke();
-      ctx.fillStyle = "#ffb347";
-      ctx.font = "bold 12px Segoe UI,sans-serif";
-      ctx.textAlign = "left";
-      ctx.fillText(`Day ${dayIndex} Objectives  (Tab)`, ox + 12, oy + 18);
-      objs.forEach((o, i) => {
-        const done = objDone(o.id);
-        const p = o.target === 0 ? 0 : objProg[o.id] || 0;
-        ctx.fillStyle = done ? "#6d6" : "#e8d8f0";
-        ctx.font = "11px Segoe UI,sans-serif";
-        const mark = done ? "✓" : "○";
-        const label = o.short || o.label;
-        const prog = o.target === 0 ? "✓" : `${p}/${o.target}`;
-        fitText(`${mark} ${label}  ${prog}`, ox + 12, oy + 40 + i * 20, ow - 24, "left");
-      });
-      // Uncommitted blocs — the "I can't find voters" fix
-      const leftN = remainingVoterCount();
-      const hintY = oy + 40 + objs.length * 20 + 4;
-      if (leftN > 0 && leftN <= 6) {
-        const miss = VOTER_GROUPS.filter((v) => !voters.includes(v.id)).slice(0, 2);
+      let oy = 64;
+
+      if (inCampaign && chapterMission && chapter) {
+        const mh = chapterMission.completed ? 40 : 54;
+        ctx.fillStyle = "rgba(20,16,34,0.82)";
+        drawRounded(ox, oy, ow, mh, 8);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(160,200,255,0.45)";
+        ctx.stroke();
+        ctx.textAlign = "left";
         ctx.fillStyle = "#a8d0ff";
-        ctx.font = "10px Segoe UI,sans-serif";
+        ctx.font = "bold 12px Segoe UI,sans-serif";
+        fitText(`${chapter.name} — Chapter Mission`, ox + 12, oy + 18, ow - 24, "left");
+        ctx.font = "11px Segoe UI,sans-serif";
+        ctx.fillStyle = chapterMission.completed ? "#6d6" : "#e8d8f0";
+        const missionMark = chapterMission.completed ? "✓" : "○";
         fitText(
-          `Still open (${leftN}): ${miss.map((v) => v.name.split(" ")[0]).join(", ")}${leftN > 2 ? "…" : ""} · C codex`,
+          `${missionMark} ${chapterMission.label}  ${chapterMission.progress}/${chapterMission.steps.length}`,
           ox + 12,
-          hintY,
+          oy + 36,
           ow - 24,
           "left"
         );
-      } else if (leftN === 0) {
-        ctx.fillStyle = "#80e0a0";
+        if (!chapterMission.completed) {
+          ctx.fillStyle = "#ffd090";
+          fitText(`Next: ${chapterMission.steps[chapterMission.progress].toUpperCase()}`, ox + 12, oy + 50, ow - 24, "left");
+        }
+        oy += mh + 8;
+      }
+
+      if (showDailyDetail) {
+        const objs = currentObjectives();
+        const rows = objs.length;
+        const oh = 28 + rows * 20;
+        ctx.fillStyle = "rgba(20,12,30,0.78)";
+        drawRounded(ox, oy, ow, oh, 8);
+        ctx.fill();
+        ctx.strokeStyle = "rgba(255,160,60,0.4)";
+        ctx.stroke();
+        ctx.fillStyle = "#ffb347";
+        ctx.font = "bold 12px Segoe UI,sans-serif";
+        ctx.textAlign = "left";
+        ctx.fillText(`Day ${dayIndex} Objectives  (Tab)`, ox + 12, oy + 18);
+        objs.forEach((o, i) => {
+          const done = objDone(o.id);
+          const p = o.target === 0 ? 0 : objProg[o.id] || 0;
+          ctx.fillStyle = done ? "#6d6" : "#e8d8f0";
+          ctx.font = "11px Segoe UI,sans-serif";
+          const mark = done ? "✓" : "○";
+          const label = o.short || o.label;
+          const prog = o.target === 0 ? "✓" : `${p}/${o.target}`;
+          fitText(`${mark} ${label}  ${prog}`, ox + 12, oy + 40 + i * 20, ow - 24, "left");
+        });
+        // Uncommitted blocs — the "I can't find voters" fix
+        const leftN = remainingVoterCount();
+        const hintY = oy + 40 + objs.length * 20 + 4;
+        if (leftN > 0 && leftN <= 6) {
+          const miss = VOTER_GROUPS.filter((v) => !voters.includes(v.id)).slice(0, 2);
+          ctx.fillStyle = "#a8d0ff";
+          ctx.font = "10px Segoe UI,sans-serif";
+          fitText(
+            `Still open (${leftN}): ${miss.map((v) => v.name.split(" ")[0]).join(", ")}${leftN > 2 ? "…" : ""} · C codex`,
+            ox + 12,
+            hintY,
+            ow - 24,
+            "left"
+          );
+        } else if (leftN === 0) {
+          ctx.fillStyle = "#80e0a0";
+          ctx.font = "10px Segoe UI,sans-serif";
+          fitText("All 12 blocs courted — recruit obj auto-clears.", ox + 12, hintY, ow - 24, "left");
+        }
+        // crisis + debate hint under objectives
+        const extraY = hintY + 16;
+        ctx.fillStyle = "#ffb070";
         ctx.font = "10px Segoe UI,sans-serif";
-        fitText("All 12 blocs courted — recruit obj auto-clears.", ox + 12, hintY, ow - 24, "left");
-      }
-      // crisis + debate hint under objectives
-      const extraY = hintY + 16;
-      ctx.fillStyle = "#ffb070";
-      ctx.font = "10px Segoe UI,sans-serif";
-      fitText(`Crisis: ${getCrisis().title}`, ox + 12, extraY, ow - 24, "left");
-      ctx.fillStyle = "#c0b0e0";
-      fitText(`Rule: ${getBoardRule().title}`, ox + 12, extraY + 14, ow - 24, "left");
-      if (getCrisis().debateDay && !debateDone) {
-        ctx.fillStyle = "#e0a0ff";
-        fitText("○ Plaza Debate at STAGE", ox + 12, extraY + 28, ow - 24, "left");
-      } else if (debateDone) {
-        ctx.fillStyle = debateWon ? "#8d8" : "#daa";
-        fitText(debateWon ? "✓ Debate won" : "✓ Debate attempted", ox + 12, extraY + 28, ow - 24, "left");
-      }
-      const coal = activeCoalition();
-      if (coal) {
-        ctx.fillStyle = coal.color;
-        fitText(coal.name, ox + 12, extraY + 42, ow - 24, "left");
+        fitText(`Crisis: ${getCrisis().title}`, ox + 12, extraY, ow - 24, "left");
+        ctx.fillStyle = "#c0b0e0";
+        fitText(`Rule: ${getBoardRule().title}`, ox + 12, extraY + 14, ow - 24, "left");
+        if (getCrisis().debateDay && !debateDone) {
+          ctx.fillStyle = "#e0a0ff";
+          fitText("○ Plaza Debate at STAGE", ox + 12, extraY + 28, ow - 24, "left");
+        } else if (debateDone) {
+          ctx.fillStyle = debateWon ? "#8d8" : "#daa";
+          fitText(debateWon ? "✓ Debate won" : "✓ Debate attempted", ox + 12, extraY + 28, ow - 24, "left");
+        }
+        const coal = activeCoalition();
+        if (coal) {
+          ctx.fillStyle = coal.color;
+          fitText(coal.name, ox + 12, extraY + 42, ow - 24, "left");
+        }
       }
     }
 
@@ -4278,6 +4723,36 @@
     if (buttons) inv.push(`🔘×${buttons}`);
     if (toolLevel) inv.push("🔧+");
     if (inv.length) ctx.fillText(inv.join("  "), 12, H - 12);
+  }
+
+  function drawSeasonWeather() {
+    if (!campaign) return;
+    const season = campaignSeason();
+    const weather = currentCampaignWeather().name;
+    const tint = { winter: "rgba(170,220,255,0.07)", spring: "rgba(150,255,190,0.05)", summer: "rgba(255,210,90,0.06)", fall: "rgba(220,110,45,0.07)" }[campaign.season];
+    if (tint) {
+      ctx.fillStyle = tint;
+      ctx.fillRect(0, 58, W, H - 58);
+    }
+    ctx.fillStyle = "rgba(20,12,30,0.72)";
+    drawRounded(W - 190, 62, 176, 24, 7);
+    ctx.fill();
+    ctx.fillStyle = (season.palette && season.palette[2]) || "#fff";
+    ctx.font = font(10, "bold");
+    ctx.textAlign = "right";
+    ctx.fillText(`${season.name} · ${weather} · ${campaignChapter().name}`, W - 22, 78);
+    const districtCondition = campaign.districts[currentDistrict] || (currentDistrict === "plaza" && campaign.districts.market) || 0;
+    if (districtCondition) {
+      ctx.fillStyle = districtCondition > 0 ? "rgba(90,220,130,0.16)" : "rgba(220,80,80,0.16)";
+      ctx.fillRect(0, 58, W, H - 58);
+      ctx.fillStyle = districtCondition > 0 ? "#9af0b0" : "#f0a0a0";
+      ctx.font = font(10, "bold");
+      ctx.fillText(`${currentDistrict.toUpperCase()} CONDITION ${districtCondition > 0 ? "+" : ""}${districtCondition}`, W - 22, 110);
+    }
+    if (chapterMission && !chapterMission.completed) {
+      ctx.font = font(11, "bold");
+      ctx.fillText(`MISSION ${chapterMission.progress}/${chapterMission.steps.length}: ${chapterMission.label}`, W - 22, 96);
+    }
   }
 
   function skipIntro() {
@@ -4562,7 +5037,7 @@
       `Day length: ${dayLengthMode.toUpperCase()}  (L cycles short/normal/long)`,
       "",
       "Gamepad: stick move · A interact · X power · Start pause",
-      "Keyboard: WASD · E · Q · Tab · C codex",
+      "Keyboard: WASD · E · Q · Tab · C codex · J journal",
       "",
       "Language: English",
       `Build ${BUILD_ID} · web Canvas (no engine port)`,
@@ -4573,6 +5048,107 @@
     ];
     lines.forEach((line, i) => {
       ctx.fillText(line, W / 2, 152 + i * 22);
+    });
+  }
+
+  function drawChapter() {
+    const chapter = campaignChapter();
+    const season = campaignSeason();
+    const palette = season.palette || ["#201530", "#ffb347", "#ffffff"];
+    ctx.fillStyle = palette[0] || "#201530";
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "rgba(18,12,30,0.9)";
+    drawRounded(90, 45, W - 180, H - 90, 18);
+    ctx.fill();
+    ctx.strokeStyle = palette[2] || "#ffb347";
+    ctx.lineWidth = 3;
+    ctx.stroke();
+    ctx.textAlign = "center";
+    ctx.fillStyle = palette[1] || "#ffb347";
+    ctx.font = font(15, "bold");
+    ctx.fillText(`${season.name || "Civic Season"} · Chapter ${(campaign && campaign.chapter + 1) || 1}/${CAMPAIGN_CHAPTERS.length}`, W / 2, 82);
+    ctx.fillStyle = "#fff";
+    ctx.font = font(28, "bold");
+    ctx.fillText(chapter ? chapter.name : "Civic Career", W / 2, 120);
+    ctx.fillStyle = "#c8b8d8";
+    ctx.font = font(14);
+    ctx.fillText(chapter ? `${campaign && campaign.inOffice ? chapter.role : "Opposition Organizer"} · ${chapter.days} days · ${season.sport || ""}` : "", W / 2, 148);
+
+    if (chapterPhase === "decision") {
+      const decision = chapter && (chapter.decisions || [])[chapterDecisionIndex];
+      ctx.fillStyle = "#ffe0a0";
+      ctx.font = font(17, "bold");
+      ctx.fillText(decision ? decision.prompt : "The city waits for a decision.", W / 2, 205);
+      (decision ? decision.options : []).forEach((option, i) => {
+        const y = 245 + i * 58;
+        ctx.fillStyle = i === chapterChoice ? "rgba(255,154,60,0.3)" : "rgba(255,255,255,0.06)";
+        drawRounded(170, y, W - 340, 44, 9);
+        ctx.fill();
+        ctx.strokeStyle = i === chapterChoice ? "#ffb347" : "#554566";
+        ctx.stroke();
+        ctx.fillStyle = i === chapterChoice ? "#fff" : "#c8b8d8";
+        ctx.font = font(13, i === chapterChoice ? "bold" : "");
+        ctx.fillText(option.text, W / 2, y + 17);
+        const effects = Object.entries(option.loyalty || {})
+          .map(([id, delta]) => `${id} ${delta >= 0 ? "+" : ""}${delta}`)
+          .concat(option.infrastructure ? [`infrastructure +${option.infrastructure}`] : [])
+          .concat(option.readiness ? [`readiness +${option.readiness}`] : [])
+          .join(" · ");
+        ctx.fillStyle = i === chapterChoice ? "#ffd8a0" : "#8f80a8";
+        ctx.font = font(10);
+        fitText(effects || "Outcome depends on mission performance", W / 2, y + 35, W - 380, "center");
+      });
+      ctx.fillStyle = "#8f80a8";
+      ctx.font = font(11);
+      ctx.fillText(`Decision ${chapterDecisionIndex + 1}/${Math.max(1, (chapter.decisions || []).length)} · arrows/tap + Enter`, W / 2, 480);
+    } else {
+      ctx.fillStyle = "#e8d8f0";
+      ctx.font = font(17);
+      wrapText(chapter ? (chapterPhase === "exit" ? chapter.exit : chapter.intro) : season.opening, W / 2, 205, 650, 28, 5, "center");
+      const loyalty = Object.values((campaign && campaign.loyalty) || {});
+      const avg = loyalty.length ? Math.round(loyalty.reduce((a, b) => a + b, 0) / loyalty.length) : 50;
+      ctx.fillStyle = "#a8d8b0";
+      ctx.font = font(13, "bold");
+      ctx.fillText(`City loyalty ${avg}/100 · Infrastructure ${campaign ? campaign.infrastructure : 0} · Rescues ${campaign ? campaign.rescues : 0}`, W / 2, 375);
+      ctx.fillStyle = "#ffb347";
+      ctx.font = font(14, "bold");
+      ctx.fillText(chapterPhase === "exit" ? "Continue civic career" : "Begin chapter", W / 2, 440);
+      ctx.fillStyle = "#8878a8";
+      ctx.font = font(11);
+      ctx.fillText("Enter / tap", W / 2, 466);
+    }
+  }
+
+  function drawConversations() {
+    ctx.fillStyle = "rgba(10,8,20,0.86)";
+    ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = "rgba(30,20,50,0.97)";
+    drawRounded(110, 45, W - 220, H - 90, 14);
+    ctx.fill();
+    ctx.strokeStyle = "#ff9a3c";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = "#ffb347";
+    ctx.font = font(20, "bold");
+    ctx.textAlign = "left";
+    ctx.fillText("Conversation Journal", 140, 82);
+    ctx.fillStyle = "#a090b8";
+    ctx.font = font(11);
+    ctx.fillText("Newest first · J / Esc closes", 140, 103);
+    const entries = conversationLog.slice(0, 10);
+    if (!entries.length) {
+      ctx.fillStyle = "#c8b8d8";
+      ctx.font = font(14);
+      ctx.fillText("Talk to a neighbor and their story will appear here.", 140, 145);
+      return;
+    }
+    entries.forEach((entry, i) => {
+      ctx.fillStyle = i % 2 ? "rgba(255,255,255,0.025)" : "rgba(255,160,60,0.055)";
+      drawRounded(132, 118 + i * 36, W - 264, 30, 6);
+      ctx.fill();
+      ctx.fillStyle = "#eee6f4";
+      ctx.font = font(11);
+      fitText(entry, 144, 138 + i * 36, W - 290, "left");
     });
   }
 
@@ -4869,7 +5445,7 @@
       ctx.fillText(e.debateWon ? "Plaza Debate: WIN" : "Plaza Debate: messy but present", 80, 430);
     }
 
-    const last = e.day >= MAX_DAYS;
+    const last = e.day >= campaignMaxDays();
     ctx.fillStyle = "rgba(255,140,40,0.95)";
     drawRounded(W / 2 - 160, 460, 320, 50, 12);
     ctx.fill();
@@ -5054,6 +5630,7 @@
     { id: "restart", label: "Restart run", hint: "R" },
     { id: "options", label: "Options", hint: "O" },
     { id: "gallery", label: "Achievement Gallery", hint: "G" },
+    { id: "journal", label: "Conversation Journal", hint: "J" },
     { id: "glossary", label: "Glossary", hint: "H" },
     { id: "credits", label: "Credits", hint: "I" },
   ];
@@ -5066,6 +5643,7 @@
       state = "select";
     } else if (id === "options") showOptions = true;
     else if (id === "gallery") showGallery = true;
+    else if (id === "journal") showConversations = true;
     else if (id === "glossary") showGlossary = true;
     else if (id === "credits") showCredits = true;
   }
@@ -5094,8 +5672,8 @@
     pauseButtons = [];
     const btnW = panelW - 48,
       btnX = panelX + 24,
-      btnH = 40,
-      gap = 9;
+      btnH = 36,
+      gap = 6;
     let by = panelY + 60;
     PAUSE_ITEMS.forEach((it) => {
       ctx.fillStyle = "rgba(255,154,60,0.12)";
@@ -5227,7 +5805,7 @@
     ctx.fillStyle = "#1a1020";
     ctx.font = "bold 16px Segoe UI,sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("Title Screen (Enter)", W / 2, 488);
+    ctx.fillText(campaign && !campaign.complete ? "Chapter Decisions (Enter)" : "Title Screen (Enter)", W / 2, 488);
     ctx.fillStyle = "#6a5a88";
     ctx.font = "11px Cascadia Mono,monospace";
     const achN = Object.keys(achievements).length;
@@ -5240,10 +5818,12 @@
     if (state === "intro") drawIntro(dt);
     else if (state === "title") drawTitle();
     else if (state === "select") drawSelect();
+    else if (state === "chapter") drawChapter();
     else if (state === "evening") drawEvening();
     else if (state === "results") drawResults();
     else {
       drawWorld();
+      drawSeasonWeather();
       drawHUD();
       if (state === "pause") drawPause();
     }
@@ -5251,10 +5831,13 @@
     if (showCredits) drawCredits();
     if (showGallery) drawGallery();
     if (showGlossary) drawGlossary();
+    if (showConversations) drawConversations();
   }
 
   // ─── Input ───────────────────────────────────────────────────
+  window.addEventListener("pointerdown", ensureAudio, { once: true, passive: true });
   window.addEventListener("keydown", (e) => {
+    ensureAudio();
     keys[e.key] = true;
     keys[e.key.toLowerCase()] = true;
 
@@ -5267,6 +5850,18 @@
         // Any key starts the cold-open bed after browser gesture unlock
         ensureAudio();
       }
+      return;
+    }
+    if (state === "chapter") {
+      const chapter = campaignChapter();
+      const decision = chapter && (chapter.decisions || [])[chapterDecisionIndex];
+      if (chapterPhase === "decision" && decision) {
+        const n = decision.options.length;
+        if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") chapterChoice = (chapterChoice + n - 1) % n;
+        else if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") chapterChoice = (chapterChoice + 1) % n;
+      }
+      if (e.key === "Enter" || e.key === " ") advanceCampaignChapter();
+      e.preventDefault();
       return;
     }
 
@@ -5313,6 +5908,23 @@
         }
         e.preventDefault();
       }
+    }
+    if (e.key === "j" || e.key === "J") {
+      showConversations = !showConversations;
+      if (showConversations) {
+        showOptions = false;
+        showCredits = false;
+        showGallery = false;
+        showGlossary = false;
+        showCodex = false;
+      }
+      e.preventDefault();
+      return;
+    }
+    if (showConversations) {
+      if (e.key === "Escape") showConversations = false;
+      e.preventDefault();
+      return;
     }
     if (showGallery || showGlossary) {
       if (e.key === "Escape") {
@@ -5447,16 +6059,18 @@
           e.preventDefault();
         } else {
           resetRun(pick);
-          state = "play";
-          toast(`You wake as ${selected.name}. Check the Town Board.`);
+          beginChapterIntro();
+          toast(`${campaignSeason().name}: ${campaignSeason().opening}`);
           e.preventDefault();
         }
       } else if (state === "evening") {
         finishEvening();
         e.preventDefault();
       } else if (state === "results") {
-        state = "title";
-        titleFocus = hasSave() ? "continue" : "new";
+        chapterPhase = "decision";
+        chapterDecisionIndex = 0;
+        chapterChoice = 0;
+        state = "chapter";
         e.preventDefault();
       } else if (state === "play" && e.key === " ") {
         interact();
@@ -5539,6 +6153,18 @@
 
     if (state === "intro") {
       skipIntro();
+      if (fromTouch && e.cancelable) e.preventDefault();
+      return true;
+    }
+    if (state === "chapter") {
+      const chapter = campaignChapter();
+      const decision = chapter && (chapter.decisions || [])[chapterDecisionIndex];
+      if (chapterPhase === "decision" && decision) {
+        const top = 245;
+        const row = Math.floor((my - top) / 58);
+        if (row >= 0 && row < decision.options.length) chapterChoice = row;
+      }
+      advanceCampaignChapter();
       if (fromTouch && e.cancelable) e.preventDefault();
       return true;
     }
@@ -5626,8 +6252,8 @@
             sfx("warn");
           } else {
             resetRun(c);
-            state = "play";
-            toast(`You wake as ${selected.name}. Check the Town Board.`);
+            beginChapterIntro();
+            toast(`${campaignSeason().name}: ${campaignSeason().opening}`);
           }
         }
       });
@@ -5638,8 +6264,10 @@
       return true;
     }
     if (state === "results") {
-      state = "title";
-      titleFocus = "new";
+      chapterPhase = "decision";
+      chapterDecisionIndex = 0;
+      chapterChoice = 0;
+      state = "chapter";
       return true;
     }
     return false;
@@ -5970,7 +6598,7 @@
       return {
         mode: state,
         dayIndex,
-        maxDays: MAX_DAYS,
+        maxDays: campaignMaxDays(),
         crisis: getCrisis().id,
         coins,
         rep,
@@ -5997,6 +6625,12 @@
         spatCount,
         anger,
         dialogue: !!dialogue,
+        conversationCount: conversationLog.length,
+        showConversations,
+        audioState: audioCtx ? audioCtx.state : "not-started",
+        musicActive: !!musicNodes,
+        musicGain: musicNodes ? musicNodes.master.gain.value : 0,
+        campaign: campaignView(),
         coalition: coalitionLabel(),
         boardRule: getBoardRule().id,
         evening: !!evening,
@@ -6024,6 +6658,70 @@
         resetRun(CHARACTERS[charIdx]);
         state = "play";
         return selected.id;
+      },
+      startCampaign(season) {
+        campaign = newCampaign(season);
+        initChapterMission();
+        setCampaignDaySeconds();
+        return campaignView();
+      },
+      advanceChapter() {
+        if (campaign.chapter >= CAMPAIGN_CHAPTERS.length - 1) campaign.complete = true;
+        else campaign.chapter += 1;
+        initChapterMission();
+        setCampaignDaySeconds();
+        return campaignView();
+      },
+      resolveCampaignEvent,
+      adjustLoyalty: adjustCampaignLoyalty,
+      get chapterMission() {
+        return chapterMissionView();
+      },
+      missionAction(zoneId) {
+        return progressChapterMission(zoneId);
+      },
+      finalizeMission() {
+        return finalizeChapterMission();
+      },
+      setCampaignStats(values = {}) {
+        if (!campaign) campaign = newCampaign();
+        if (values.readiness != null) campaign.readiness = Math.max(0, values.readiness | 0);
+        if (values.infrastructure != null) campaign.infrastructure = Math.max(0, values.infrastructure | 0);
+        if (values.promises) campaign.promises = { ...values.promises };
+        setCampaignDaySeconds();
+        return campaignView();
+      },
+      get weather() {
+        return currentCampaignWeather();
+      },
+      chapterControl(action, phase) {
+        if (phase) chapterPhase = phase;
+        state = "chapter";
+        return chapterControl(action);
+      },
+      loseElection() {
+        campaign.inOffice = false;
+        campaign.electionLosses += 1;
+        return campaignView();
+      },
+      attemptComeback: attemptCampaignComeback,
+      npcContextLine,
+      get campaign() {
+        return campaignView();
+      },
+      get chapterIntro() {
+        const chapter = campaignChapter();
+        return (chapter && chapter.intro) || "";
+      },
+      get chapterExit() {
+        const chapter = campaignChapter();
+        return (chapter && chapter.exit) || "";
+      },
+      get seasonDaySeconds() {
+        return DAY_SECONDS;
+      },
+      get musicTheme() {
+        return campaignMusicKey();
       },
       unlockAllChars() {
         CHARACTERS.forEach((c) => {

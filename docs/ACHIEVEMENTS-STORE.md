@@ -13,7 +13,10 @@ In-game: **G** opens boards · **Tab** switches Achievements ↔ Milestones.
 
 ## Character unlock path (milestones) — main roster
 
-Multiple paths per character (first match wins). Easier first-week routes listed first.
+By design: only **Tiny Orange Man** ("Orange Squeeze") is free at the start. The other 5 main
+characters unlock progressively via milestones, and the 4 secret-cast characters unlock via easter
+eggs on top of that — 1 starter + 5 unlockable main + 4 secret = **10 total**. Multiple paths per
+character (first match wins); easier first-week routes are listed first.
 
 | Character | Milestone | Requirement |
 |-----------|-----------|-------------|
@@ -24,6 +27,9 @@ Multiple paths per character (first match wins). Easier first-week routes listed
 | Leon Rocket | Full Roll Call | 12 voters in one week |
 | Buck Bootstraps | Money Machine Season | Clear week with **Money** |
 | (all main) | Seasoned Operator | Clear 3 weeks |
+
+`ACH_FIRST_MS`("Cast Call") fires at 2+ main characters unlocked; `ACH_FULL_CAST`("Full Cast") fires
+once all 6 main characters are unlocked.
 
 ## Secret cast (easter eggs — not shown until unlocked)
 
@@ -60,6 +66,8 @@ Secrets never appear as locked cards — they materialize on the select grid onl
 | full_cast | ACH_FULL_CAST | Full Cast | gold |
 | three_weeks | ACH_THREE_WEEKS | Three Seasons | silver |
 | no_steal | ACH_NO_STEAL | Tight Ship | silver |
+| secret_one | ACH_SECRET_ONE | Hidden Citizen | silver |
+| secret_all | ACH_SECRET_ALL | Deep Cut Cast | gold |
 
 Source of truth: `data.js` → `ACHIEVEMENT_DEFS` + `MILESTONES`.
 

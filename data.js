@@ -425,8 +425,8 @@ const MILESTONES = [
   {
     id: "ms_first_week",
     name: "First Election Night",
-    desc: "Finish a full week once (any ending).",
-    unlocks: ["alex"],
+    desc: "Finish Election Week once (any ending).",
+    unlocks: ["alex", "mayor", "leon"],
     need: { weeksCleared: 1 },
   },
   {
@@ -718,6 +718,7 @@ const NPCS = [
       permit: "That's the missing civic stamp! You're a municipal hero.",
       done: "Town Hall is slightly less cursed today. Slightly.",
     },
+    dayLines: ["The permit blew toward the Oversized Mailbox.", "New district forms arrived. Same old triplicate.", "Scandal paperwork uses the red stamp.", "March permits are filed under 'loud walking.'", "Gala permits somehow approve themselves.", "Spin storms create excellent filing weather.", "Election forms close when the evening bell rings."],
   },
   {
     id: "barista",
@@ -731,6 +732,7 @@ const NPCS = [
       fix: "You fixed it! Free drip of civic courage.",
       done: "Steaming. Literally and politically.",
     },
+    dayLines: ["Fix the cart and coffee can cool your composure.", "Media people order foam and call it strategy.", "Campus runs on petitions and questionable espresso.", "Marchers get the union roast.", "Donors ask whether the beans have a portfolio.", "Bad headlines need strong coffee.", "Election day is decaf only in theory."],
   },
   {
     id: "vendor",
@@ -743,6 +745,7 @@ const NPCS = [
       default: "INSERT COINS · DISPENSE BUTTONS · NO REFUNDS",
       buy: "Clunk. A shiny campaign button appears. Artisanal.",
     },
+    dayLines: ["Buttons turn coins into attention.", "Media Alley prefers shiny inventory.", "Students trade buttons like tiny manifestos.", "March crowds notice matching colors.", "Donors call buttons wearable assets.", "The machine now dispenses emergency spin.", "Last call for commemorative democracy."],
   },
   {
     id: "paver",
@@ -757,6 +760,7 @@ const NPCS = [
       excuses: ["Supply chain. Nothing moves.", "Permit's pending. Any decade now.", "My asphalt guy's cousin has the truck.", "We did a study. The study needs a study."],
       exposed: "Look, the potholes are a JOURNEY, not a destination.",
     },
+    dayLines: ["Day-one asphalt special. Results not included.", "Media vans make excellent pothole detectors.", "Students keep naming the holes after deans.", "March route upgrade? Ten coins, naturally.", "Donor limos have premium suspension.", "A spin storm counts as resurfacing.", "Vote first. Road quality remains undecided."],
   },
   {
     id: "consultant",
@@ -776,6 +780,7 @@ const NPCS = [
       ],
       exposed: "Between us? The memo was pre-written. Still counts as delivery.",
     },
+    dayLines: ["A clean permit plays well with Moderates.", "Media loves a memo with three nouns.", "Students distrust synergy. Use smaller words.", "Unions prefer action to decks.", "Donors adore a confident invoice.", "During a spin storm, say 'framework' slowly.", "Results night needs a transition committee."],
   },
   // Neighborhood antagonists — time wasters & emotion pressure
   {
@@ -787,14 +792,16 @@ const NPCS = [
     home: "park",
     role: "timewaster",
     lines: {
-      monologue: [
-        "Oh honey—do you like cats? Of course you like cats.",
-        "Mr. Whiskers is the HOA president. Unofficially. Spiritually.",
-        "The city won't fund a cat café. Bureaucracy hates joy.",
-        "I once filed a permit for a litter box. Six weeks. Denied.",
-        "Anyway you're a good listener. Stay. I have seventeen more stories.",
+      monologues: [
+        ["Oh honey—do you like cats? Of course you like cats.", "Mr. Whiskers is the HOA president. Spiritually.", "He fined a squirrel for unauthorized acorn storage.", "The squirrel appealed. He sat on the paperwork.", "The neighborhood has never been safer."],
+        ["Juniper became a crossing guard last spring.", "She stared until every bicycle stopped.", "City Hall said she lacked a reflective vest.", "So I knitted one. They called it unauthorized signage.", "She still works Tuesdays. Payment is tuna."],
+        ["The city won't fund my cat café. Bureaucracy hates joy.", "They wanted food, pet, and chair licenses.", "The chairs passed. The cats refused interviews.", "Pickles knocked the inspector's clipboard into the soup.", "Our file now says 'memorable.' Progress!"],
+        ["Marmalade got locked inside the library overnight.", "By morning every mystery novel was on the floor.", "The librarian called it vandalism. I call it criticism.", "Marmalade prefers detectives who are cats.", "We're petitioning for a new shelf. Sit down."],
+        ["I filed a permit for a community litter box.", "They said the plaza isn't zoned for ceremonial sand.", "Mr. Whiskers attended in a tiny necktie.", "The zoning board still voted no.", "We're appealing on grounds of insufficient dignity."],
+        ["Duchess organized a neighborhood watch last night.", "She watched a paper bag for three hours.", "Karen reported the bag for loitering.", "Doug tried to borrow it. Duchess invoked eminent domain.", "The bag is now in witness protection."],
+        ["Chairman Meow once ran for local office.", "His platform: naps, snacks, fewer vacuum cleaners.", "He carried the laundry-room district unanimously.", "A laser-pointer scandal ended the administration.", "History is cruel. Do you have a red dot?"],
       ],
-      done: "Fine. Go. Mr. Whiskers will remember this.",
+      done: "Fine. Go. Tomorrow I'll tell you about the gazebo incident.",
     },
   },
   {
@@ -814,6 +821,7 @@ const NPCS = [
         "I pay taxes. I demand a receipt for democracy.",
       ],
     },
+    dayLines: ["The fountain splash radius violates three bylaws.", "Your Media Alley posture lacks approval.", "Petitions need matching clipboards.", "Marching is just loitering in formation.", "Gala flowers exceed the tasteful-height limit.", "Your spin is audible after quiet hours.", "Ballot lines must respect lawn boundaries."],
   },
   {
     id: "drunk",
@@ -829,6 +837,7 @@ const NPCS = [
       broke: "You're broke too? Solidarity. Still taking emotional donations.",
       empty: "Already got my cut today. Democracy is a buffet.",
     },
+    dayLines: ["Keep five coins tucked away for emergencies.", "Media folks drop change when cameras roll.", "Campus has snacks if you look organized.", "March crowds share everything except passwords.", "Gala pockets jingle louder than plaza pockets.", "Spin storms make wallets hard to track.", "Election night contributions are emotionally binding."],
   },
   {
     id: "mover",
@@ -842,6 +851,7 @@ const NPCS = [
       help: "Teamwork! Union strength is not a metaphor today.",
       done: "Path's clear. Remember who moved the city.",
     },
+    dayLines: ["Move the crate and labor remembers.", "Camera crews never lift their own cases.", "Campus needs hands before hashtags.", "The march route opens when people pitch in.", "Donor furniture is heavy with symbolism.", "Bad news travels fast; crates do not.", "We move ballot boxes together or not at all."],
   },
   {
     id: "stagehand",
@@ -854,6 +864,7 @@ const NPCS = [
       default: "Mic check for democracy? Anyone?",
       rally: "That rally hit. Students are nodding like it's a syllabus.",
     },
+    dayLines: ["The stage is quiet. Rally power wakes it.", "A debate lands better than three slogans.", "Students follow energy, then ask questions.", "March day needs a microphone and a spine.", "Gala acoustics make every promise expensive.", "Spin storms reward short honest sentences.", "Final rally: make the crowd feel included."],
   },
   {
     id: "boothie",
@@ -866,6 +877,7 @@ const NPCS = [
       default: "Free buttons if you pose with the cardboard candidate.",
       chaos: "That was… content. The algorithm will feast.",
     },
+    dayLines: ["First photo each day earns attention and heat.", "Cameras love a clean district entrance.", "Campus photos need handmade signs.", "March pictures work best with actual marchers.", "Gala lighting forgives almost anything.", "Today the algorithm rewards panic.", "Election-night cardboard never blinks."],
   },
   {
     id: "parkgoer",
@@ -878,6 +890,7 @@ const NPCS = [
       default: "Quiet green space. Please don't legislate the ducks.",
       wine: "You brought actual kindness. The wine-moms approve.",
     },
+    dayLines: ["The park cools composure. Benches are free.", "Quiet voters notice who visits twice.", "Students picnic where speeches cannot reach.", "After a march, reconcile before grudges harden.", "Gala heat looks silly from a park bench.", "Kindness survives a spin storm.", "Calm coalitions hold together on election day."],
   },
   {
     id: "watchdog",
@@ -889,11 +902,7 @@ const NPCS = [
     lines: {
       default: "Read the board. Then question the board. Then rest.",
     },
-    dayLines: {
-      1: "Day one: the board is already lying by omission.",
-      4: "Midweek: loyalty is a budget line item.",
-      7: "Election eve: count twice, trust once.",
-    },
+    dayLines: ["Day one: the board is already lying by omission.", "New districts mean new expenses. Read every objective.", "Scandals cost less when caught early.", "Midweek: loyalty is a budget line item.", "Gala receipts reveal civic priorities.", "A spin storm hides numbers in adjectives.", "Election eve: count twice, trust once."],
   },
   {
     id: "anchor",
@@ -903,11 +912,7 @@ const NPCS = [
     color: "#c080e0",
     home: "studio",
     lines: { default: "Live in five. Make it punchy. Make it vague." },
-    dayLines: {
-      2: "Media Alley opens — bring a narrative or become one.",
-      3: "Leak season. Don't trip over your own soundbite.",
-      6: "Spin storm: every errand is content.",
-    },
+    dayLines: ["The plaza is the story until a camera arrives.", "Media Alley opens—bring a narrative or become one.", "Leak season. Don't trip over your own soundbite.", "March footage needs a clear point of view.", "The gala wants sparkle; voters want answers.", "Spin storm: every errand is content.", "Results are facts wearing television makeup."],
   },
   {
     id: "leaker",
@@ -917,10 +922,7 @@ const NPCS = [
     color: "#a06070",
     home: "leakdesk",
     lines: { default: "I have documents. Also vibes. Mostly vibes." },
-    dayLines: {
-      3: "Scandal-ready. Interact for a LEAK setpiece when the board says so.",
-      5: "Gala photoshoot needs a villain. Don't volunteer.",
-    },
+    dayLines: ["Nothing leaks on day one except the fountain.", "Media doors open; documents begin migrating.", "Scandal-ready. Interact for a LEAK setpiece when the board says so.", "March organizers keep better notes than City Hall.", "Gala photos need a villain. Don't volunteer.", "Spin storms bury facts; logs remember them.", "My final source is a pigeon with boundaries."],
   },
   {
     id: "ra",
@@ -930,11 +932,7 @@ const NPCS = [
     color: "#60d080",
     home: "quad",
     lines: { default: "Quad rules: no drones, no donor balloons, yes petitions." },
-    dayLines: {
-      3: "Campus is open. Petition hard, sleep harder.",
-      4: "March Monday — the route wants feet.",
-      7: "Students vote with feet and group chats.",
-    },
+    dayLines: ["Campus is watching the plaza from three group chats.", "A good debate can recruit students before campus opens.", "Campus is open. Petition hard, sleep harder.", "March day—the route wants feet.", "Students can smell gala catering from here.", "Spin cannot outrun a screenshot.", "Students vote with feet and group chats."],
   },
   {
     id: "host",
@@ -944,13 +942,61 @@ const NPCS = [
     color: "#e8d080",
     home: "gala",
     lines: { default: "Invitation optional. Confidence mandatory." },
-    dayLines: {
-      4: "Donor Heights unlocks. Smile with your tax policy.",
-      5: "Gala night. Branding optional. Heat inevitable.",
-      7: "They count ballots; we count canapés.",
-    },
+    dayLines: ["The guest list begins as a rumor.", "Media mentions create invitations.", "Marches make donors check the curtains.", "Donor Heights unlocks. Smile with your tax policy.", "Gala night. Branding optional. Heat inevitable.", "A spin storm pairs nicely with sparkling water.", "They count ballots; we count canapés."],
   },
 ];
+
+// Context dialogue is deliberately shallow: runtime selects a shared context line,
+// then an NPC-specific insight. Missing keys safely fall back to `default`.
+const NPC_CONTEXT_LINES = {
+  season: {
+    winter: "Short daylight makes every warm, open door count.",
+    spring: "Rain exposes old drains and new promises.",
+    summer: "Long evenings bring crowds, heat, and second chances.",
+    fall: "The leaves turn before the budget does.",
+  },
+  chapter: {
+    election: "Listen now; governing makes these conversations more expensive.",
+    festival: "A parade route is a map of who gets included.",
+    championship: "The final score never includes traffic or cleanup.",
+    storm: "Preparation is policy with the cameras turned off.",
+    recovery: "Repair order tells the city whose normal matters.",
+    budget: "Every line item has a neighbor behind it.",
+    reelection: "People remember outcomes longer than closing slogans.",
+  },
+  loyalty: {
+    low: "Trust is low. Show up, help, and skip the speech.",
+    high: "You've earned trust; don't spend it like loose change.",
+  },
+  outcome: {
+    success: "Good result. Now make sure the benefit lasts.",
+    failure: "Bad result, but accountability is still a useful next move.",
+  },
+};
+
+const NPC_CONTEXT_INSIGHTS = {
+  clerk: { chapter: "Permits are boring until a shelter, parade, or repair needs one.", success: "The forms held. I may frame a duplicate.", failure: "The paperwork failed people; fix the process, not the headline." },
+  barista: { chapter: "Coffee hears every neighborhood before City Hall does.", success: "Folks are trading hopeful rumors over refills.", failure: "The room is upset. Listening is free; refills are not." },
+  vendor: { chapter: "Supplies reveal priorities faster than slogans.", success: "CLUNK: PRACTICAL RESULTS DISPENSED.", failure: "OUT OF STOCK: EXCUSES. TRY RESTITUTION." },
+  paver: { chapter: "Weather, crowds, and rescue trucks all find the same ignored potholes.", success: "Fine, the repair worked. Please act surprised.", failure: "That shortcut became a long public meeting." },
+  consultant: { chapter: "A civic career is seven chapters and one invoice.", success: "Memo: measurable outcome. Disturbingly effective.", failure: "Memo: apologize plainly. I cannot trademark it." },
+  catlady: { chapter: "Mr. Whiskers tracks civic progress from three windows and a disputed shed.", success: "The cats approve. Juniper slow-blinked twice.", failure: "Marmalade says failure is just a nap before the next attempt." },
+  karen: { chapter: "Seasonal decorations remain subject to tasteful-height review.", success: "Adequate. I have reduced my complaint to two pages.", failure: "I documented the outcome in portrait and landscape." },
+  drunk: { chapter: "A long campaign needs safe rides, warm shelters, and fewer heroic shortcuts.", success: "You did good, pal. That's rarer than exact change.", failure: "Own it, repair it, and keep moving." },
+  mover: { chapter: "Every chapter has something heavy that speeches cannot move.", success: "People pulled together. Remember every pair of hands.", failure: "We reset, lift together, and leave nobody under the crate." },
+  stagehand: { chapter: "Different season, same rule: test the mic before the crowd arrives.", success: "That ending earned its applause.", failure: "Missed cue. Reset the stage and tell the truth." },
+  boothie: { chapter: "Festivals, games, storms—the camera always crops out somebody.", success: "Great footage. Better that the result was real.", failure: "The clip is rough. The follow-up can still be useful." },
+  parkgoer: { chapter: "The park measures seasons in shade, mud, snow, and who still visits.", success: "The ducks remain neutral, but the neighbors noticed.", failure: "Sit, breathe, then repair one honest thing." },
+  watchdog: { chapter: "Track promises, spending, readiness, and who waited longest.", success: "The numbers support cautious applause.", failure: "Publish the miss before somebody leaks it." },
+  anchor: { chapter: "The civic calendar keeps producing live television.", success: "Results lead tonight. Commentary can wait.", failure: "The failure is news; the response becomes the story." },
+  leaker: { chapter: "Seasonal folders leak exactly like ordinary folders.", success: "Documents suggest competence. Suspicious, but welcome.", failure: "The logs remember who knew what and when." },
+  ra: { chapter: "Students arrive for sports and stay for decisions that affect rent and transit.", success: "Campus group chats have upgraded you to 'possibly useful.'", failure: "Students forgive mistakes faster than cover-ups." },
+  host: { chapter: "Every season has a gala; recovery calls theirs a fundraiser.", success: "A durable result is this year's exclusive accessory.", failure: "Accountability is underdressed, but let it in." },
+};
+
+NPCS.forEach((npc) => {
+  npc.contextLines = { defaults: NPC_CONTEXT_LINES, ...NPC_CONTEXT_INSIGHTS[npc.id] };
+});
 
 // Pickup / button spots (spread across districts)
 const BUTTON_SPOTS = [
@@ -961,6 +1007,187 @@ const BUTTON_SPOTS = [
   { x: 1450, y: 250, taken: false },
   { x: 500, y: 850, taken: false },
   { x: 1920, y: 220, taken: false },
+];
+
+// Persistent civic-career content. Runtime owns progress; this is immutable copy/config.
+const CAMPAIGN_SEASONS = {
+  winter: {
+    name: "Winter Lights",
+    startMonth: "January",
+    palette: ["#18243d", "#d9f3ff", "#ffc857"],
+    weather: ["clear", "snow", "ice"],
+    daylight: [0.72, 0.76, 0.8],
+    sport: "Civic Ice Cup",
+    opening: "Snow muffles the plaza while gym lights promise a loud season.",
+    music: "winter_bells",
+  },
+  spring: {
+    name: "Spring Renewal",
+    startMonth: "April",
+    palette: ["#315c4b", "#a8e6b0", "#ffd6e0"],
+    weather: ["rain", "clear", "flood-watch"],
+    daylight: [0.92, 1, 1.08],
+    sport: "Orange League Opening Day",
+    opening: "Fresh banners rise beside puddles, blossoms, and unfinished drainage work.",
+    music: "spring_stroll",
+  },
+  summer: {
+    name: "Summer Streets",
+    startMonth: "July",
+    palette: ["#164e63", "#ffe08a", "#ff7b54"],
+    weather: ["clear", "heat", "thunder"],
+    daylight: [1.18, 1.14, 1.08],
+    sport: "World Civic Summer Games",
+    opening: "Long evenings bring tourists, track meets, and one ambitious hosting bid.",
+    music: "summer_brass",
+  },
+  fall: {
+    name: "Autumn Campaign",
+    startMonth: "October",
+    palette: ["#40291f", "#e58b3a", "#f2d06b"],
+    weather: ["clear", "wind", "cold-rain"],
+    daylight: [1, 0.9, 0.8],
+    sport: "Pocket Bowl Football",
+    opening: "Leaves cross the plaza as marching bands compete with campaign megaphones.",
+    music: "fall_march",
+  },
+};
+
+const CAMPAIGN_CHAPTERS = [
+  {
+    id: "election",
+    name: "Election Week",
+    role: "Candidate",
+    days: 7,
+    dayLength: "standard",
+    intro: "Earn a place at the table without promising the table to everybody.",
+    exit: "Ballots settle the race; every promise follows the winner home.",
+    event: "campaign",
+    music: "campaign_plaza",
+    mission: { zoneId: "plaza", objective: "Recruit 3 voter blocs", threshold: 3, metric: "recruitedBlocs", reward: { loyalty: 5, coins: 10 } },
+    decisions: [
+      { id: "open_calendar", prompt: "Publish the campaign calendar?", options: [
+        { text: "Publish everything", loyalty: { policy: 6, donors: -3 }, promise: "open-calendar" },
+        { text: "Keep planning private", loyalty: { donors: 3, policy: -5 }, heat: 2 },
+      ] },
+    ],
+  },
+  {
+    id: "festival",
+    name: "Festival & Parade",
+    role: "Council Member",
+    days: 5,
+    dayLength: "long-evening",
+    intro: "Floats, food carts, and three groups have booked the same intersection.",
+    exit: "The confetti clears, revealing who felt celebrated and who cleaned up.",
+    event: "parade-rescue",
+    music: "festival_route",
+    mission: { zoneId: "plaza", objective: "Guide 4 parade groups through the route", threshold: 4, metric: "paradeGroups", reward: { loyalty: 6, infrastructure: 2 } },
+    decisions: [
+      { id: "parade_route", prompt: "Where should the parade turn?", options: [
+        { text: "Main Street merchants", loyalty: { business: 7, street: -3 }, district: { market: 4 } },
+        { text: "Neighborhood loop", loyalty: { street: 7, business: -2 }, district: { plaza: 3 } },
+      ] },
+      { id: "lost_mascot", prompt: "A runaway mascot traps a child on a float.", options: [
+        { text: "Lead the rescue", loyalty: { families: 8 }, time: -18, rescue: true },
+        { text: "Call the parade crew", loyalty: { policy: 3, families: -5 }, heat: 3 },
+      ] },
+    ],
+  },
+  {
+    id: "championship",
+    name: "Championship Season",
+    role: "Committee Chair",
+    days: 6,
+    dayLength: "event-night",
+    intro: "The home team wants a trophy; residents mostly want their driveways back.",
+    exit: "The scoreboard fades while the stadium bill remains brightly illuminated.",
+    eventBySeason: { winter: "ice-cup", spring: "baseball", summer: "summer-games-bid", fall: "football" },
+    music: "stadium_night",
+    mission: { zoneId: "quad", objective: "Resolve 3 event-night problems", threshold: 3, metric: "eventProblems", reward: { loyalty: 6, coins: 12 } },
+    decisions: [
+      { id: "venue_money", prompt: "How should the event be funded?", options: [
+        { text: "Public repairs first", loyalty: { budget: 7, fans: -3 }, infrastructure: 6 },
+        { text: "Sponsor spectacle", loyalty: { fans: 7, donors: 5, budget: -6 }, heat: 4 },
+      ] },
+    ],
+  },
+  {
+    id: "storm",
+    name: "Weather Emergency",
+    role: "Acting Mayor",
+    days: 4,
+    dayLength: "short-crisis",
+    intro: "The forecast turns red. Preparation is about to become visible.",
+    exit: "The storm passes; the rescue map becomes tomorrow's accountability map.",
+    eventBySeason: { winter: "blizzard", spring: "river-flood", summer: "heat-and-thunder", fall: "windstorm" },
+    music: "emergency_pulse",
+    mission: { zoneId: "park", objective: "Evacuate 5 residents before conditions peak", threshold: 5, metric: "rescuedResidents", reward: { loyalty: 8, readiness: 5 } },
+    decisions: [
+      { id: "evacuation", prompt: "Who receives the first evacuation buses?", options: [
+        { text: "Highest physical risk", loyalty: { families: 7, business: -3 }, rescue: true },
+        { text: "Largest shelter hub", loyalty: { policy: 4, families: -3 }, readiness: 5 },
+        { text: "Accept donor helicopters", loyalty: { donors: 7, budget: -4 }, heat: 5, rescue: true },
+      ] },
+    ],
+  },
+  {
+    id: "recovery",
+    name: "Rescue & Recovery",
+    role: "Civic Leader",
+    days: 6,
+    dayLength: "adaptive-damage",
+    intro: "Volunteers arrive before contracts, cameras, or a shared definition of fixed.",
+    exit: "Repairs remain on the map, along with the neighborhoods still waiting.",
+    event: "supply-and-rebuild",
+    music: "recovery_theme",
+    mission: { zoneId: "vending", objective: "Deliver 6 recovery supplies", threshold: 6, metric: "suppliesDelivered", reward: { loyalty: 7, infrastructure: 6 } },
+    decisions: [
+      { id: "rebuild", prompt: "What gets rebuilt first?", options: [
+        { text: "Homes and shelters", loyalty: { families: 8, donors: -2 }, infrastructure: 5 },
+        { text: "Shops and transit", loyalty: { business: 7, street: 3 }, infrastructure: 6 },
+        { text: "Independent audit", loyalty: { budget: 8, policy: 4 }, time: -12 },
+      ] },
+    ],
+  },
+  {
+    id: "budget",
+    name: "Budget Reckoning",
+    role: "Mayor or Opposition Organizer",
+    days: 5,
+    dayLength: "hearing-schedule",
+    intro: "Every successful rescue has submitted an invoice and a competing anecdote.",
+    exit: "The ledger closes; alliances recalculate what loyalty is worth.",
+    event: "public-hearings",
+    music: "budget_clock",
+    mission: { zoneId: "mayor", objective: "Hear 4 neighborhood delegations", threshold: 4, metric: "hearingsCompleted", reward: { loyalty: 5, budget: 6 } },
+    decisions: [
+      { id: "budget_gap", prompt: "Close the recovery budget gap.", options: [
+        { text: "Progressive civic fee", loyalty: { street: 5, donors: -7, budget: 3 } },
+        { text: "Trim public events", loyalty: { budget: 7, fans: -6, business: -2 } },
+        { text: "Issue repair bonds", loyalty: { policy: 5, budget: -3 }, infrastructure: 7 },
+      ] },
+    ],
+  },
+  {
+    id: "reelection",
+    name: "Reelection",
+    role: "Incumbent or Challenger",
+    days: 7,
+    dayLength: "seasonal-finale",
+    intro: "The city remembers outcomes more clearly than speeches, but speeches brought signs.",
+    exit: "Win or lose, the same city opens tomorrow with a different civic role.",
+    event: "legacy-vote",
+    music: "legacy_finale",
+    mission: { zoneId: "stage", objective: "Secure 6 loyal blocs", threshold: 6, metric: "loyalBlocs", reward: { loyalty: 8, legacy: 1 } },
+    decisions: [
+      { id: "closing_case", prompt: "What defines the closing argument?", options: [
+        { text: "Promises kept", loyalty: { policy: 6 }, requires: "fulfilled-promises" },
+        { text: "City repaired", loyalty: { street: 6, families: 4 }, requires: "infrastructure" },
+        { text: "A loyal coalition", loyalty: { donors: 3, fans: 3, business: 3 }, requires: "coalition" },
+      ] },
+    ],
+  },
 ];
 
 global.ORANGE_DATA = {
@@ -983,5 +1210,7 @@ global.ORANGE_DATA = {
   CLUTTER,
   NPCS,
   BUTTON_SPOTS,
+  CAMPAIGN_SEASONS,
+  CAMPAIGN_CHAPTERS,
 };
 })(typeof window !== "undefined" ? window : globalThis);

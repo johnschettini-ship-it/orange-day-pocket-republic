@@ -1,74 +1,85 @@
-# Playtest checklist — Long-Term Draft 1 (`v1.3-draft`)
+# Playtest checklist — Seasonal Civic Career (`v1.4`)
 
-Use this for a **human full-week** pass. Headless `node smoke.js` already covers systems; this covers feel, readability, and soft-locks.
+Use this for a human career pass. Run `node smoke.js` first and expect **GO**.
 
-## Setup
-1. Open `index.html` (or local server) after hard refresh (**Ctrl+F5**).  
-2. Confirm title shows **Long-Term Draft 1** / **v1.3-draft**.  
-3. Optional: `node smoke.js` → expect **GO**.
+## Setup and controls
 
-## Title & meta
+1. Hard refresh (**Ctrl+F5**) and start a new campaign.
+2. Confirm the title/build label says **Seasonal Civic Career / v1.4**.
+3. Test keyboard, touch, and a connected gamepad on a chapter decision:
+   move the choice both directions, confirm it, and verify only the highlighted
+   choice resolves.
+4. Confirm music starts after the first input and changes at the next chapter.
+
+## Seasonal identity
+
 | # | Check | Pass? |
-|---|--------|-------|
-| T1 | Title, New Week, Continue, Options, Credits readable | |
-| T2 | Save slots **1 / 2 / 3** switch on title; Continue uses active slot | |
-| T3 | **G** opens Achievement Gallery; **H** opens Glossary; Esc closes | |
-| T4 | Best ending line appears after one strong week (gallery) | |
-| T5 | Options: SFX/Music, text size, reduce flash, day length | |
+|---|---|---|
+| SE1 | Start season is shown before play; palette, weather, sport, and music agree | |
+| SE2 | Winter has short daylight and snow/ice; spring has rain/flood watch | |
+| SE3 | Summer has long daylight and heat/thunder; fall has wind/cold rain | |
+| SE4 | Weather changes play (movement/time/readiness), not only the HUD label | |
+| SE5 | Chapter clock changes with season and chapter type | |
+| SE6 | NPC small talk mentions the current season/chapter and changes after advancing | |
 
-## Day 1 tutorial
+## Seven-chapter career
+
+For every row, play the mission in the world before resolving its decision.
+
+| Chapter | Playable gate | Pass? | Notes |
+|---|---|---|---|
+| Election Week | Recruit/permit campaign loop reaches Election Night | | |
+| Festival & Parade | Complete parade route and mascot rescue interactions | | |
+| Championship | Complete the season-appropriate sports venue task | | |
+| Weather Emergency | Complete evacuation/rescue interactions under adverse weather | | |
+| Rescue & Recovery | Deliver supplies and repair a damaged location | | |
+| Budget Reckoning | Complete hearing/ledger interactions | | |
+| Reelection | Complete closing campaign task and reach the career result | | |
+
+## Decisions and consequences
+
 | # | Check | Pass? |
-|---|--------|-------|
-| D1 | Toast tips fire once (board, E, Q, home, gates, codex) | |
-| D2 | Tips do not spam every day after first run | |
-| D3 | Board shows crisis + civic rule | |
+|---|---|---|
+| C1 | A successful mission and a failed mission produce different loyalty totals | |
+| C2 | Decision preview identifies affected groups; result reports gains and losses | |
+| C3 | Readiness/infrastructure/promise state changes mission outcome where relevant | |
+| C4 | District repairs remain visible in the following chapter | |
+| C5 | Save mid-chapter; Continue restores season, chapter, mission, loyalty, and city state | |
+| C6 | Reload cannot claim the same mission reward twice | |
+| C7 | Chapter exit summarizes outcome; next intro carries consequences forward | |
 
-## Full week (one character)
-Pick any character; prefer **Tiny** first, then one of **Rally Queen / Buck**.
+## Office loss and comeback
 
-| Day | Gate / beat | Pass? | Notes |
-|-----|-------------|-------|-------|
-| 1 | Plaza only; Media locked | | |
-| 2 | →MEDIA opens; Media Alley usable | | |
-| 3 | →CAMPUS opens | | |
-| 4 | →DONOR opens | | |
-| 2–5 | Setpieces: Debate · Leak · March · Gala (as scheduled) | | |
-| 7 | HOME sleep → **Election Night** results + ending | | |
-
-## Systems
 | # | Check | Pass? |
-|---|--------|-------|
-| S1 | Recruit ≥3 blocs; codex **C** marks seen | |
-| S2 | Rival spat can lower loyalty (recruit rivals) | |
-| S3 | Coalition label on evening/results | |
-| S4 | Power **Q** works; vend upgrade once | |
-| S5 | Mid-day save → Continue restores coins/voters/day | |
-| S6 | Slot 1 and slot 2 keep separate runs | |
-| S7 | Soft NG+: strong week → next New Week shows start ¢ bonus | |
+|---|---|---|
+| L1 | Lose reelection: save remains active and role becomes **Opposition Organizer** | |
+| L2 | Opposition chapter remains playable and can gain loyalty | |
+| L3 | Complete the comeback condition: role returns to an in-office civic role | |
+| L4 | Loss and comeback survive save/reload | |
+| L5 | Career can reach a clear legacy ending after either route | |
 
-## Satire hygiene
-| # | Check | Pass? |
-|---|--------|-------|
-| H1 | No real politician names / slogans / logos | |
-| H2 | **Mayor Mandate** reads local mayor, not presidential | |
-| H3 | **Leon Rocket** reads tech inventor, not presidential | |
-| H4 | **Rally Queen** never “AOC” or real-person branding | |
+## Accessibility and soft-lock watch
 
-## Soft-lock watch
-- Cannot sleep with required day end path  
-- District gate stuck closed after unlock day  
-- Save load desync (wrong character / day)  
-- Blank canvas or uncaught console errors  
+- Keyboard, touch, and gamepad-equivalent chapter actions select the same choices.
+- Decision copy and loyalty deltas remain readable at large text scale.
+- No chapter advances before its required mission is complete.
+- Failed missions still provide a path forward.
+- Weather never traps the player behind geometry or makes a task unreachable.
+- No blank canvas, uncaught console error, save desync, or unrelated localStorage wipe.
+- No real politician names, slogans, logos, or likenesses; satire stays local and fictional.
 
 ## Sign-off
+
 | Field | Value |
-|-------|--------|
-| Build | v1.3-draft |
+|---|---|
+| Build | v1.4 |
 | Tester | |
 | Date | |
-| Browser | |
+| Browser / controller | |
+| Season / route | |
 | Result | GO / NO-GO |
 | P0/P1 issues | |
 | Notes | |
 
-Log a short summary into `.agents/playtest-log.md` when done.
+Only `orange-director` marks the phase **GO**. Log the human result in
+`.agents/playtest-log.md`.
