@@ -5706,6 +5706,7 @@
   const PAUSE_ITEMS = [
     { id: "resume", label: "Resume", hint: "Esc" },
     { id: "save", label: "Save", hint: "S" },
+    { id: "load", label: "Load", hint: "L" },
     { id: "restart", label: "Restart run", hint: "R" },
     { id: "quit", label: "Quit to Main Menu", hint: "Q" },
     { id: "options", label: "Options", hint: "O" },
@@ -5718,6 +5719,7 @@
   function pauseAction(id) {
     if (id === "resume") state = "play";
     else if (id === "save") toast(saveGame() ? "Saved." : "Save failed.");
+    else if (id === "load") toast(loadGame() ? "Loaded." : "No save to load.");
     else if (id === "restart") {
       clearSave();
       state = "select";
@@ -5736,18 +5738,20 @@
     ctx.fillStyle = "rgba(10,8,20,0.72)";
     ctx.fillRect(0, 0, W, H);
 
-    // Panel height follows PAUSE_ITEMS.length instead of a value hand-tuned
+    // Panel size follows PAUSE_ITEMS.length instead of a value hand-tuned
     // for whatever the list's length happened to be at the time — the fixed
-    // 424px box was sized for 8 items and silently overflowed (last button
-    // overlapping the footer text) the moment a 9th was added.
+    // 424px box was sized for 8 items and silently overflowed the moment a
+    // 9th was added; a fixed panelY=70 then overflowed again at 10 items.
+    // Capped height + recentering (matching Options/Credits) means this
+    // can't recur no matter how long PAUSE_ITEMS grows.
     const headerH = 60,
       btnH0 = 36,
       gap0 = 6,
       footerH = 30;
     const panelW = 380,
       panelX = W / 2 - panelW / 2,
-      panelY = 70,
-      panelH = headerH + PAUSE_ITEMS.length * btnH0 + (PAUSE_ITEMS.length - 1) * gap0 + footerH;
+      panelH = Math.min(H - 24, headerH + PAUSE_ITEMS.length * btnH0 + (PAUSE_ITEMS.length - 1) * gap0 + footerH),
+      panelY = Math.max(12, (H - panelH) / 2);
     ctx.fillStyle = "rgba(30,20,50,0.95)";
     drawRounded(panelX, panelY, panelW, panelH, 14);
     ctx.fill();
@@ -6210,6 +6214,7 @@
     } else if (state === "pause") {
       if (e.key === "Escape") pauseAction("resume");
       else if (e.key === "s" || e.key === "S") pauseAction("save");
+      else if (e.key === "l" || e.key === "L") pauseAction("load");
       else if (e.key === "r" || e.key === "R") pauseAction("restart");
       else if (e.key === "q" || e.key === "Q") pauseAction("quit");
       else if (e.key === "o" || e.key === "O") pauseAction("options");
