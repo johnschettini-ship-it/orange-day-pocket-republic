@@ -426,7 +426,11 @@ const MILESTONES = [
     id: "ms_first_week",
     name: "First Election Night",
     desc: "Finish Election Week once (any ending).",
-    unlocks: ["alex", "mayor", "leon"],
+    // Deliberately NOT leon — his only fast path is the hard one
+    // (ms_full_dex, all 12 blocs in a week). A 1-week freebie here would
+    // make Full Roll Call pointless. He still has the guaranteed slow path
+    // via ms_veteran (3 weeks cleared) so nobody's permanently locked out.
+    unlocks: ["alex", "mayor"],
     need: { weeksCleared: 1 },
   },
   {
