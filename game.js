@@ -533,6 +533,7 @@
   const ACHIEVEMENT_DEFS = _D.ACHIEVEMENT_DEFS || [];
   const POWER_RANK_COST = _D.POWER_RANK_COST;
   const DAILY_OBJECTIVES = _D.DAILY_OBJECTIVES;
+  const ROTATABLE_DAY_EVENTS = _D.ROTATABLE_DAY_EVENTS;
   const CRISES = _D.CRISES;
   const MAP_W = _D.MAP_W;
   const MAP_H = _D.MAP_H;
@@ -820,8 +821,45 @@
     return DAY_SECONDS;
   }
 
+  let eventDayMap = {}; // event id -> day (2-6), reshuffled each new game by shuffleDayEvents()
+
+  /**
+   * Assign debate/scandal/media/march/gala to a fresh, random permutation of
+   * days 2-6 each new game, respecting each event's minDay (its home
+   * district's unlock day). Most-constrained-first: gala (minDay 4) picks
+   * from {4,5,6} before march (minDay 3) picks from what's left, so neither
+   * can ever get boxed out by an earlier, less-constrained pick.
+   */
+  function shuffleDayEvents() {
+    let remaining = [2, 3, 4, 5, 6];
+    function takeRandom(minDay) {
+      const eligible = remaining.filter((d) => d >= minDay);
+      const chosen = eligible[Math.floor(Math.random() * eligible.length)];
+      remaining = remaining.filter((d) => d !== chosen);
+      return chosen;
+    }
+    const order = Object.keys(ROTATABLE_DAY_EVENTS).sort((a, b) => ROTATABLE_DAY_EVENTS[b].minDay - ROTATABLE_DAY_EVENTS[a].minDay);
+    const map = {};
+    order.forEach((id) => {
+      map[id] = takeRandom(ROTATABLE_DAY_EVENTS[id].minDay);
+    });
+    eventDayMap = map;
+  }
+
+  function eventIdForDay(day) {
+    return Object.keys(eventDayMap).find((id) => eventDayMap[id] === day) || null;
+  }
+
   function getCrisis() {
-    return CRISES.find((c) => c.day === dayIndex) || CRISES[0];
+    const base = CRISES.find((c) => c.day === dayIndex) || CRISES[0];
+    const eventId = eventIdForDay(dayIndex);
+    return {
+      ...base,
+      debateDay: eventId === "debate",
+      scandalDay: eventId === "scandal",
+      marchDay: eventId === "march",
+      galaDay: eventId === "gala",
+    };
   }
 
   function districtUnlocked(id) {
@@ -887,6 +925,10 @@
   /** Fresh run from character select */
   function resetRun(char, keepCampaign = false) {
     if (!keepCampaign || !campaign) campaign = newCampaign();
+    // Fresh game (not a chapter-to-chapter continuation within the same
+    // campaign) gets a new debate/scandal/march/gala/media day arrangement
+    // — otherwise Day 2 is always the debate, every single playthrough.
+    if (!keepCampaign) shuffleDayEvents();
     selected = char;
     dayIndex = 1;
     coins = 12 + (ngPlusBonus || 0); // v1.3: slightly friendlier start + soft NG+
@@ -1800,7 +1842,20 @@
    * blocs (or auto-clears when none are left) so Day 3+ isn't a scavenger hunt.
    */
   function currentObjectives() {
-    const base = DAILY_OBJECTIVES[dayIndex] || DAILY_OBJECTIVES[1];
+    // Days 2-6's middle "flavor" slot swaps in whichever event
+    // shuffleDayEvents() assigned to this day — the DAILY_OBJECTIVES table
+    // entry underneath still supplies that day's fixed voters-target/home,
+    // just not its old fixed debate/scandal/march/gala/media id.
+    const staticDay = DAILY_OBJECTIVES[dayIndex] || DAILY_OBJECTIVES[1];
+    const eventId = dayIndex >= 2 && dayIndex <= 6 ? eventIdForDay(dayIndex) : null;
+    const base =
+      eventId && ROTATABLE_DAY_EVENTS[eventId]
+        ? staticDay.map((o) =>
+            ROTATABLE_DAY_EVENTS[o.id]
+              ? { id: eventId, label: ROTATABLE_DAY_EVENTS[eventId].label, short: ROTATABLE_DAY_EVENTS[eventId].short, target: 1 }
+              : o
+          )
+        : staticDay;
     const left = remainingVoterCount();
     return base.map((o) => {
       if (o.id !== "voters") return { ...o };
@@ -6898,6 +6953,14 @@
       maybeCoalitionFanfare,
       setDay(n) {
         dayIndex = clamp(n, 1, MAX_DAYS);
+      },
+      /** Force a specific event-to-day arrangement for deterministic tests
+       *  (real play always uses shuffleDayEvents()'s random permutation). */
+      setEventDayMap(map) {
+        eventDayMap = { ...map };
+      },
+      get eventDayMap() {
+        return { ...eventDayMap };
       },
       travelTo,
       districtUnlocked,

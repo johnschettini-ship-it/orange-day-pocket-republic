@@ -617,13 +617,34 @@ const DAILY_OBJECTIVES = {
   7: [{ id: "home", label: "Survive Election Eve — sleep to count the vote", short: "Election Eve", target: 1 }],
 };
 
-// Phase C crises (7-day election week)
+// Days 2-6's middle "flavor" objective (debate/scandal/march/gala/media)
+// used to be nailed to the fixed day shown above. It now gets reshuffled
+// onto a different day each new game — runtime picks a fresh permutation
+// per resetRun() respecting each event's minDay (its home district's
+// unlock day, so e.g. the Donor Gala can never land before Donor Heights
+// itself is reachable). The day-2..6 recruit targets in DAILY_OBJECTIVES
+// above stay fixed to the day number regardless of which event lands
+// there — only the flavor slot rotates.
+const ROTATABLE_DAY_EVENTS = {
+  debate: { minDay: 2, label: "Take the Plaza Debate (Civic Stage)", short: "Plaza Debate" },
+  scandal: { minDay: 2, label: "Check the Leak Desk (Media Alley)", short: "Leak Desk" },
+  media: { minDay: 2, label: "Ride out the Spin Storm (Media Alley)", short: "Spin Storm" },
+  march: { minDay: 3, label: "Join the Union March (Campus Green)", short: "Union March" },
+  gala: { minDay: 4, label: "Work the Donor Gala (Donor Heights)", short: "Donor Gala" },
+};
+
+// Phase C crises (7-day election week). debateDay/scandalDay/marchDay/
+// galaDay used to live here as static per-day flags — they're now computed
+// at runtime from the reshuffled ROTATABLE_DAY_EVENTS map instead (see
+// game.js getCrisis()), so a fresh game doesn't always put the debate on
+// day 2, the gala on day 5, etc. Title/blurb/economics stay fixed per day
+// regardless of which event rotates in.
 const CRISES = [
   { day: 1, id: "permit_panic", title: "PERMIT PANIC", blurb: "Lost paperwork clogs the plaza.", coinMult: 1.1, recruitMod: 0, buttonCost: 4, upgradeMult: 1 },
-  { day: 2, id: "button_market", title: "BUTTON BLACK MARKET", blurb: "Merch scarce; debates heat up.", coinMult: 1, recruitMod: 0.05, buttonCost: 6, upgradeMult: 1, debateDay: true },
-  { day: 3, id: "caffeine_collapse", title: "CAFFEINE COLLAPSE", blurb: "Fix the cart; democracy runs on drip.", coinMult: 1.05, recruitMod: 0, buttonCost: 4, upgradeMult: 0.9, scandalDay: true },
-  { day: 4, id: "march_monday", title: "MARCH MONDAY", blurb: "Campus stirs. Union energy rises.", coinMult: 1, recruitMod: 0.08, buttonCost: 4, upgradeMult: 1, marchDay: true },
-  { day: 5, id: "gala_glow", title: "GALA GLOW", blurb: "Donor Heights sparkles. Velvet ropes.", coinMult: 1.15, recruitMod: 0, buttonCost: 5, upgradeMult: 1.05, galaDay: true },
+  { day: 2, id: "button_market", title: "BUTTON BLACK MARKET", blurb: "Merch scarce; debates heat up.", coinMult: 1, recruitMod: 0.05, buttonCost: 6, upgradeMult: 1 },
+  { day: 3, id: "caffeine_collapse", title: "CAFFEINE COLLAPSE", blurb: "Fix the cart; democracy runs on drip.", coinMult: 1.05, recruitMod: 0, buttonCost: 4, upgradeMult: 0.9 },
+  { day: 4, id: "march_monday", title: "MARCH MONDAY", blurb: "Campus stirs. Union energy rises.", coinMult: 1, recruitMod: 0.08, buttonCost: 4, upgradeMult: 1 },
+  { day: 5, id: "gala_glow", title: "GALA GLOW", blurb: "Donor Heights sparkles. Velvet ropes.", coinMult: 1.15, recruitMod: 0, buttonCost: 5, upgradeMult: 1.05 },
   { day: 6, id: "spin_storm", title: "SPIN STORM", blurb: "Media Alley floods the feeds.", coinMult: 1.05, recruitMod: 0.05, buttonCost: 5, upgradeMult: 1, heatMult: 1.3 },
   { day: 7, id: "election_eve", title: "ELECTION EVE", blurb: "Last day before the count. Everything matters.", coinMult: 1.1, recruitMod: 0.05, buttonCost: 4, upgradeMult: 0.95 },
 ];
@@ -1206,6 +1227,7 @@ global.ORANGE_DATA = {
   ACHIEVEMENT_DEFS,
   POWER_RANK_COST,
   DAILY_OBJECTIVES,
+  ROTATABLE_DAY_EVENTS,
   CRISES,
   MAP_W,
   MAP_H,
