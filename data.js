@@ -333,6 +333,68 @@ const VOTER_GROUPS = [
     favorNeed: 2,
     recruitHint: "Visit PARK twice without high Heat chaos.",
   },
+  // ── Coalition expansion (one extra bloc per named coalition) ──
+  // `coalitionLean` is separate from COALITIONS[x].members: the original
+  // 2-of-3/3-of-3 coalition BONUS math still reads only the fixed 3-member
+  // list untouched. coalitionLean instead feeds the newer over-recruitment
+  // cap (see game.js ALIGNMENT_CAP) — recruiting too many blocs leaning the
+  // same way starts backfiring, even ones outside a coalition's official 3.
+  {
+    id: "watch",
+    name: "Neighborhood Watch",
+    icon: "🔦",
+    color: "#4a9a6a",
+    mood: "vigilant",
+    bonus: "Reduces late-night scandal risk",
+    preferred: ["mayor", "bernie"],
+    rival: "chaos",
+    passive: { lateNightShield: true },
+    favorNeed: 2,
+    coalitionLean: "grassroots",
+    recruitHint: "Talk to the Board Watchdog — twice.",
+  },
+  {
+    id: "developers",
+    name: "Real Estate Developers",
+    icon: "🏗️",
+    color: "#c08850",
+    mood: "ambitious",
+    bonus: "+coin from infrastructure-flavored tasks",
+    preferred: ["mayor", "donny"],
+    rival: "union",
+    passive: { coinMult: 1.1 },
+    favorNeed: 3,
+    coalitionLean: "money",
+    recruitHint: "Donor Heights: talk to the Gala host.",
+  },
+  {
+    id: "memelords",
+    name: "Meme Lords",
+    icon: "😹",
+    color: "#e070c0",
+    mood: "unserious",
+    bonus: "Bigger viral coin spikes, bigger Heat spikes",
+    preferred: ["tiny", "leon"],
+    rival: "policy",
+    passive: { viral: true, heatMult: 1.1 },
+    favorNeed: 2,
+    coalitionLean: "chaos_ticket",
+    recruitHint: "Campaign Booth photo op, more than once.",
+  },
+  {
+    id: "zoning",
+    name: "Zoning Board Wonks",
+    icon: "📐",
+    color: "#8090b0",
+    mood: "meticulous",
+    bonus: "Cheaper upgrades, slower everything else",
+    preferred: ["mayor", "bernie"],
+    rival: "chaos",
+    passive: { cheapUpgrades: true },
+    favorNeed: 3,
+    coalitionLean: "policy",
+    recruitHint: "Deliver the lost permit to Town Hall.",
+  },
 ];
 
 // Phase C districts

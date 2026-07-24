@@ -2047,6 +2047,40 @@
     camPunch = Math.max(camPunch, amount);
   }
 
+  // Recruiting too many blocs that lean the same way starts backfiring —
+  // "if you sway voters too much, the result swings to the opposition."
+  // Cap = a coalition's official 3-member core + this bonus, so the
+  // existing 2-of-3/3-of-3 coalition BONUS strategy (which rewards
+  // committing to exactly 3) is never itself punished — only genuine
+  // over-extension beyond it is.
+  const ALIGNMENT_CAP_BONUS = 2;
+
+  /** A bloc "leans" a coalition if it's one of that coalition's official 3
+   *  members, or (for the newer expansion blocs) explicitly tagged via
+   *  coalitionLean. Plural because "moderates" is an official member of
+   *  BOTH Money and Policy in the base data — using .find() here (first
+   *  match only) would silently drop that second membership. Coalition-less
+   *  blocs (e.g. Lawn Guardians) return [] and never trigger the cap. */
+  function coalitionLeansOf(groupId) {
+    const g = VOTER_GROUPS.find((v) => v.id === groupId);
+    const leans = COALITIONS.filter((c) => c.members.includes(groupId)).map((c) => c.id);
+    if (g && g.coalitionLean && !leans.includes(g.coalitionLean)) leans.push(g.coalitionLean);
+    return leans;
+  }
+  function coalitionLeanOf(groupId) {
+    return coalitionLeansOf(groupId)[0] || null;
+  }
+  function alignmentCapFor(coalitionId) {
+    const c = COALITIONS.find((x) => x.id === coalitionId);
+    return (c ? c.members.length : 3) + ALIGNMENT_CAP_BONUS;
+  }
+  function alignmentCountFor(coalitionId) {
+    return voters.filter((id) => coalitionLeansOf(id).includes(coalitionId)).length;
+  }
+  function wouldTriggerAlignmentBacklash(groupId) {
+    return coalitionLeansOf(groupId).some((lean) => alignmentCountFor(lean) >= alignmentCapFor(lean));
+  }
+
   function tryRecruit(groupId, force = false) {
     if (voters.includes(groupId)) {
       return false;
@@ -2068,6 +2102,23 @@
       voterFavor[groupId] = Math.max(0, fav - 1);
       toast(`${g.name} still need convincing. Favor now ${voterFavor[groupId]}/${need}. Keep grinding.`);
       addAxes({ street: -1, heat: 1 });
+      sfx("warn");
+      return false;
+    }
+    // Overreach: they were ready to join, but you've swayed this lean too
+    // far already — the excess swings to the opposition instead of you.
+    // force=true (setpieces/QA) bypasses this, same as the two gates above.
+    if (!force && wouldTriggerAlignmentBacklash(groupId)) {
+      // Name the SPECIFIC lean that's actually over cap — a dual-lean bloc
+      // like moderates could be fine on one side and over on the other.
+      const lean = coalitionLeansOf(groupId).find((l) => alignmentCountFor(l) >= alignmentCapFor(l));
+      const coal = COALITIONS.find((c) => c.id === lean);
+      const coalName = coal ? coal.name : "one lean";
+      addAxes({ street: -3, heat: 3 });
+      banner("OVERREACH", "#e04040", 2);
+      toast(`${g.name} leans too hard ${coalName} for the room — the opposition picks up the slack.`);
+      pushLog(`Overreach: ${g.name} swung to the opposition (already ${alignmentCountFor(lean)} ${coalName} blocs).`);
+      codexSeen[groupId] = true;
       sfx("warn");
       return false;
     }
@@ -2444,6 +2495,7 @@
         // One clean permit run earns Moderates (and a policy ping)
         bumpFavor("moderates", 1, { autoJoin: true });
         bumpFavor("policy", 1);
+        bumpFavor("zoning", 1);
         // Account meta: unlock path for Mayor Mandate
         meta.permits = (meta.permits || 0) + 1;
         saveMeta();
@@ -2612,6 +2664,7 @@
         toast("Photo op! +2¢, +1 Heat. The intern tags you unironically.");
         pushLog("Booth photo op — Heat +1, coins +2.");
         bumpFavor("chaos", 1);
+        bumpFavor("memelords", 1);
         noteEaster("photos", 1); // secret: Cardboard Casey at 3
         // Bootstraps toy: clarify prior statement at booth
         if (selected && selected.id === "donny") {
@@ -2664,6 +2717,7 @@
       else say(n.lines.default);
       // Board thrice is the austere errand path
       if (dayIndex >= 1) bumpFavor("budget", 1);
+      bumpFavor("watch", 1);
       return;
     }
 
@@ -2707,6 +2761,7 @@
       if (n.dayLines) say(dayLine(n.lines.default));
       else say(n.lines.default);
       bumpFavor("donors", 1);
+      bumpFavor("developers", 1);
       return;
     }
 
@@ -6942,6 +6997,18 @@
         if (g) voterFavor[id] = favorNeedOf(g);
         return tryRecruit(id, true);
       },
+      /** Unforced recruit attempt — the only way to actually reach the
+       *  alignment-cap gate, since force=true (forceRecruit) bypasses it. */
+      attemptRecruit(id) {
+        const g = VOTER_GROUPS.find((v) => v.id === id);
+        if (g) voterFavor[id] = favorNeedOf(g);
+        return tryRecruit(id, false);
+      },
+      coalitionLeanOf,
+      coalitionLeansOf,
+      alignmentCapFor,
+      alignmentCountFor,
+      wouldTriggerAlignmentBacklash,
       bumpFavor,
       getFavor(id) {
         return favorOf(id);
