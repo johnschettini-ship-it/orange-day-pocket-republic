@@ -5015,19 +5015,6 @@
   function drawOptions() {
     ctx.fillStyle = "rgba(10,8,20,0.78)";
     ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = "rgba(30,20,50,0.95)";
-    drawRounded(W / 2 - 220, 80, 440, 380, 14);
-    ctx.fill();
-    ctx.strokeStyle = "#ff9a3c";
-    ctx.lineWidth = 2;
-    drawRounded(W / 2 - 220, 80, 440, 380, 14);
-    ctx.stroke();
-    ctx.fillStyle = "#ffb347";
-    ctx.font = font(22, "bold");
-    ctx.textAlign = "center";
-    ctx.fillText("Options", W / 2, 120);
-    ctx.fillStyle = "#c8b8d8";
-    ctx.font = font(14);
     const lines = [
       `Music: ${musicOn ? "ON" : "OFF"}  (M)   vol ${Math.round(musicVol * 100)}%  ([ ])`,
       `  bed: intro · title · select · districts · evening · results`,
@@ -5046,8 +5033,31 @@
       "I — credits",
       "Esc / O — close",
     ];
+    // Panel size follows the actual content instead of a fixed 380px box —
+    // that box was already 22px too short for 16 lines at NORMAL text, and
+    // LARGE (1.15x) text made the overflow visibly cut off the last lines.
+    const headerH = 72; // space for the "Options" title above line 1
+    const bottomPad = 20;
+    const lineH = Math.round(22 * textScale);
+    const panelW = 440;
+    const panelH = Math.min(H - 24, headerH + lines.length * lineH + bottomPad);
+    const panelX = W / 2 - panelW / 2;
+    const panelY = Math.max(12, (H - panelH) / 2);
+    ctx.fillStyle = "rgba(30,20,50,0.95)";
+    drawRounded(panelX, panelY, panelW, panelH, 14);
+    ctx.fill();
+    ctx.strokeStyle = "#ff9a3c";
+    ctx.lineWidth = 2;
+    drawRounded(panelX, panelY, panelW, panelH, 14);
+    ctx.stroke();
+    ctx.fillStyle = "#ffb347";
+    ctx.font = font(22, "bold");
+    ctx.textAlign = "center";
+    ctx.fillText("Options", W / 2, panelY + 40);
+    ctx.fillStyle = "#c8b8d8";
+    ctx.font = font(14);
     lines.forEach((line, i) => {
-      ctx.fillText(line, W / 2, 152 + i * 22);
+      ctx.fillText(line, W / 2, panelY + headerH + i * lineH);
     });
   }
 
