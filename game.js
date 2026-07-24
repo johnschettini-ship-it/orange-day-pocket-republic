@@ -5012,13 +5012,15 @@
     ctx.fillText("1–3 file · Enter continue · N new · Del erase", W / 2, 528);
   }
 
+  let optionsBars = [];
+
   function drawOptions() {
     ctx.fillStyle = "rgba(10,8,20,0.78)";
     ctx.fillRect(0, 0, W, H);
     const lines = [
-      `Music: ${musicOn ? "ON" : "OFF"}  (M)   vol ${Math.round(musicVol * 100)}%  ([ ])`,
+      "__music_bar__",
       `  bed: intro · title · select · districts · evening · results`,
-      `SFX: ${sfxOn ? "ON" : "OFF"}  (S)   vol ${Math.round(sfxVol * 100)}%  (; ')`,
+      "__sfx_bar__",
       `Text size: ${textScale > 1 ? "LARGE" : "NORMAL"}  (T)`,
       `Reduce flash: ${reduceFlash ? "ON" : "OFF"}  (F)`,
       `Day length: ${dayLengthMode.toUpperCase()}  (L cycles short/normal/long)`,
@@ -5054,10 +5056,44 @@
     ctx.font = font(22, "bold");
     ctx.textAlign = "center";
     ctx.fillText("Options", W / 2, panelY + 40);
+    optionsBars = [];
+    const barW = 110,
+      barH = 10,
+      barX = panelX + panelW - 24 - 40 - barW;
+    function drawVolBar(id, on, vol, label, key, y) {
+      ctx.textAlign = "left";
+      ctx.fillStyle = "#c8b8d8";
+      ctx.font = font(14);
+      ctx.fillText(`${label}: ${on ? "ON" : "OFF"}  (${key})`, panelX + 24, y);
+      const barY = y - Math.round(11 * textScale);
+      ctx.fillStyle = "#443058";
+      drawRounded(barX, barY, barW, barH, 5);
+      ctx.fill();
+      ctx.fillStyle = on ? "#ffb347" : "#665";
+      drawRounded(barX, barY, Math.max(4, barW * clamp(vol, 0, 1)), barH, 5);
+      ctx.fill();
+      ctx.strokeStyle = "rgba(255,160,60,0.4)";
+      ctx.lineWidth = 1;
+      drawRounded(barX, barY, barW, barH, 5);
+      ctx.stroke();
+      ctx.fillStyle = "#c8b8d8";
+      ctx.font = font(11);
+      ctx.textAlign = "left";
+      ctx.fillText(`${Math.round(vol * 100)}%`, barX + barW + 8, y);
+      optionsBars.push({ id, x: barX, y: barY - 8, w: barW, h: barH + 16 });
+    }
     ctx.fillStyle = "#c8b8d8";
     ctx.font = font(14);
     lines.forEach((line, i) => {
-      ctx.fillText(line, W / 2, panelY + headerH + i * lineH);
+      const y = panelY + headerH + i * lineH;
+      if (line === "__music_bar__") drawVolBar("music", musicOn, musicVol, "Music", "M", y);
+      else if (line === "__sfx_bar__") drawVolBar("sfx", sfxOn, sfxVol, "SFX", "S", y);
+      else {
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#c8b8d8";
+        ctx.font = font(14);
+        ctx.fillText(line, W / 2, y);
+      }
     });
   }
 
@@ -5638,6 +5674,7 @@
     { id: "resume", label: "Resume", hint: "Esc" },
     { id: "save", label: "Save", hint: "S" },
     { id: "restart", label: "Restart run", hint: "R" },
+    { id: "quit", label: "Quit to Main Menu", hint: "Q" },
     { id: "options", label: "Options", hint: "O" },
     { id: "gallery", label: "Achievement Gallery", hint: "G" },
     { id: "journal", label: "Conversation Journal", hint: "J" },
@@ -5651,6 +5688,10 @@
     else if (id === "restart") {
       clearSave();
       state = "select";
+    } else if (id === "quit") {
+      saveGame();
+      state = "title";
+      titleFocus = hasSave(saveSlot) ? "continue" : "new";
     } else if (id === "options") showOptions = true;
     else if (id === "gallery") showGallery = true;
     else if (id === "journal") showConversations = true;
@@ -5662,10 +5703,18 @@
     ctx.fillStyle = "rgba(10,8,20,0.72)";
     ctx.fillRect(0, 0, W, H);
 
+    // Panel height follows PAUSE_ITEMS.length instead of a value hand-tuned
+    // for whatever the list's length happened to be at the time — the fixed
+    // 424px box was sized for 8 items and silently overflowed (last button
+    // overlapping the footer text) the moment a 9th was added.
+    const headerH = 60,
+      btnH0 = 36,
+      gap0 = 6,
+      footerH = 30;
     const panelW = 380,
       panelX = W / 2 - panelW / 2,
       panelY = 70,
-      panelH = 424;
+      panelH = headerH + PAUSE_ITEMS.length * btnH0 + (PAUSE_ITEMS.length - 1) * gap0 + footerH;
     ctx.fillStyle = "rgba(30,20,50,0.95)";
     drawRounded(panelX, panelY, panelW, panelH, 14);
     ctx.fill();
@@ -5682,9 +5731,9 @@
     pauseButtons = [];
     const btnW = panelW - 48,
       btnX = panelX + 24,
-      btnH = 36,
-      gap = 6;
-    let by = panelY + 60;
+      btnH = btnH0,
+      gap = gap0;
+    let by = panelY + headerH;
     PAUSE_ITEMS.forEach((it) => {
       ctx.fillStyle = "rgba(255,154,60,0.12)";
       drawRounded(btnX, by, btnW, btnH, 8);
@@ -6129,6 +6178,7 @@
       if (e.key === "Escape") pauseAction("resume");
       else if (e.key === "s" || e.key === "S") pauseAction("save");
       else if (e.key === "r" || e.key === "R") pauseAction("restart");
+      else if (e.key === "q" || e.key === "Q") pauseAction("quit");
       else if (e.key === "o" || e.key === "O") pauseAction("options");
       else if (e.key === "g" || e.key === "G") pauseAction("gallery");
       else if (e.key === "h" || e.key === "H") pauseAction("glossary");
@@ -6188,6 +6238,21 @@
       }
       if (fromTouch && e.cancelable) e.preventDefault();
       return true;
+    }
+    if (showOptions) {
+      const bar = optionsBars.find((b) => mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h);
+      if (bar) {
+        const frac = clamp((mx - bar.x) / bar.w, 0, 1);
+        if (bar.id === "music") {
+          musicVol = frac;
+          syncMusic();
+        } else {
+          sfxVol = frac;
+        }
+        saveSettings();
+        if (fromTouch && e.cancelable) e.preventDefault();
+        return true;
+      }
     }
     if (showOptions || showGlossary || showCredits) {
       showOptions = showGlossary = showCredits = false;
@@ -6838,6 +6903,36 @@
         return hit ? hit.id : null;
       },
       pauseAction,
+      openOptions() {
+        showOptions = true;
+        drawOptions();
+        return showOptions;
+      },
+      get optionsBars() {
+        return optionsBars.map((b) => ({ ...b }));
+      },
+      get musicVol() {
+        return musicVol;
+      },
+      get sfxVol() {
+        return sfxVol;
+      },
+      /** Mirrors the real click handler's volume-bar branch: hit-test + set. */
+      clickOptionsBar(mx, my) {
+        if (!showOptions) return null;
+        if (!optionsBars.length) drawOptions();
+        const bar = optionsBars.find((b) => mx >= b.x && mx <= b.x + b.w && my >= b.y && my <= b.y + b.h);
+        if (!bar) return null;
+        const frac = clamp((mx - bar.x) / bar.w, 0, 1);
+        if (bar.id === "music") {
+          musicVol = frac;
+          syncMusic();
+        } else {
+          sfxVol = frac;
+        }
+        saveSettings();
+        return bar.id;
+      },
       get draftLabel() {
         return DRAFT_LABEL;
       },
