@@ -5504,14 +5504,15 @@
     const col1X = px + 20,
       col2X = px + 20 + pw / 2;
     let y = 128;
-    const row = (x, label, sub, color) => {
+    const row = (x, label, sub, color, w) => {
       if (y > panelBottom) return;
+      const maxW = w || pw / 2 - 40;
       ctx.fillStyle = color || "#ffd9a0";
       ctx.font = font(12, "bold");
-      fitText(label, x, y, pw / 2 - 40, "left");
+      fitText(label, x, y, maxW, "left");
       ctx.fillStyle = "#a89ab8";
       ctx.font = font(10);
-      fitText(sub || "", x, y + 12, pw / 2 - 40, "left");
+      fitText(sub || "", x, y + 12, maxW, "left");
       y += rowH * 1.7;
     };
     const header = (x, text) => {
@@ -5533,7 +5534,7 @@
       CHARACTERS.forEach((c) => {
         if (c.secret && !isCharUnlocked(c.id)) return; // never spoil secret cast
         const unlocked = isCharUnlocked(c.id);
-        row(col1X, unlocked ? c.name + (c.secret ? " ✦" : "") : "??? (locked cast slot)", unlocked ? `${c.power} — ${c.blurb}` : "Unlock via Boards · Milestones.");
+        row(col1X, unlocked ? c.name + (c.secret ? " ✦" : "") : "??? (locked cast slot)", unlocked ? `${c.power} — ${c.blurb}` : "Unlock via Boards · Milestones.", null, pw - 40);
       });
     } else if (glossaryTab === "npcs") {
       const half = Math.ceil(NPCS.length / 2);
