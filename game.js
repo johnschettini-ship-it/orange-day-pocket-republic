@@ -4507,17 +4507,37 @@
       ctx.font = font(9, "bold");
       ctx.fillText("EVE", calStart + shown * (calW + 4) + 8, calY + 13);
     }
-    // Texture: morning headline ticker under calendar. Anchored left-of-
-    // center with a capped width so it can't reach the top-right campaign
-    // status box (drawSeasonWeather) regardless of scroll phase or headline
-    // length — it used to span nearly the full canvas width (W-80) centered
-    // near screen-middle and would render straight through that box.
+    // Texture: morning headline ticker under calendar. Two bugs fixed here:
+    // (1) this row sits at calY+32, 36px below the 58px HUD bar's bottom
+    // edge — outside the bar entirely, on top of the game world (e.g. the
+    // Mayor building). Bare text with no background read as garbled overlap
+    // with whatever was underneath. Gave it a backing pill, matching every
+    // other floating HUD text this session.
+    // (2) it used to drift horizontally with a scroll animation, anchored
+    // near screen-center with a wide allowance — provably safe against the
+    // top-right status box in the common case, but checking the actual
+    // longest HEADLINES entry against the full scroll cycle showed it could
+    // still drift into the left-side objectives panel at some scroll
+    // phases. A drifting anchor is inherently hard to prove safe against
+    // arbitrary future headline text, so: fixed position instead, centered
+    // in the safe zone between the objectives panel (right edge ~312) and
+    // the status box (left edge 736), with a maxW that provably can't
+    // reach either even at full width — no drift-related edge case left to
+    // chase. fitText's own truncation (already in place) handles anything
+    // longer than that.
     if (dayHeadline) {
-      ctx.fillStyle = "rgba(255,200,120,0.75)";
       ctx.font = font(10);
+      const tickerX = 524; // center of the 320-728 safe zone
+      const tickerY = calY + 32;
+      const tickerText = "📰 " + dayHeadline;
+      const tickerMaxW = 380; // half-width 190 + 10 pad = 200 → spans 324-724, clear of both neighbors
       ctx.textAlign = "center";
-      const scroll = (animT * 28) % (dayHeadline.length * 7 + 200);
-      fitText("📰 " + dayHeadline, W * 0.4 - scroll * 0.15, calY + 32, 380, "center");
+      const textW = Math.min(tickerMaxW, ctx.measureText(tickerText).width);
+      ctx.fillStyle = "rgba(20,12,30,0.72)";
+      drawRounded(tickerX - textW / 2 - 10, tickerY - 14, textW + 20, 20, 6);
+      ctx.fill();
+      ctx.fillStyle = "rgba(255,200,120,0.9)";
+      fitText(tickerText, tickerX, tickerY, tickerMaxW, "center");
     }
 
     if (!selected) return;
