@@ -4688,7 +4688,16 @@
       if (showDailyDetail) {
         const objs = currentObjectives();
         const rows = objs.length;
-        const oh = 28 + rows * 20;
+        // Was `28 + rows*20` — only covers the header + objective rows.
+        // Everything drawn AFTER that (the "Still open" hint line, Crisis,
+        // Rule, and the conditional Debate-status/Coalition-name lines) was
+        // never counted, so it rendered as bare text well past the box's
+        // bottom edge, onto the game world below (e.g. the Coffee Cart
+        // building). Reserves space for the worst case (both optional
+        // lines present) rather than replicating their exact conditional
+        // logic here — a same-height box on days without them is a minor,
+        // fully acceptable tradeoff against another overflow bug.
+        const oh = 116 + rows * 20;
         ctx.fillStyle = "rgba(20,12,30,0.78)";
         drawRounded(ox, oy, ow, oh, 8);
         ctx.fill();
