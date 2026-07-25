@@ -147,6 +147,7 @@
   let showGallery = false;
   let galleryTab = "achieve"; // achieve | milestones
   let showGlossary = false;
+  let glossaryTab = "cast"; // cast | npcs | locations | blocs
   // Meta progression (account-wide) — unlocks cast via milestones
   let meta = {
     weeksCleared: 0,
@@ -5459,52 +5460,116 @@
     }
   }
 
+  const GLOSSARY_TABS = [
+    { id: "cast", label: "Cast" },
+    { id: "npcs", label: "NPCs" },
+    { id: "locations", label: "Locations" },
+    { id: "blocs", label: "Voter Blocs" },
+  ];
+
   function drawGlossary() {
+    const px = W / 2 - 360,
+      py = 28,
+      pw = 720,
+      ph = 490;
+    const panelBottom = py + ph - 16;
     ctx.fillStyle = "rgba(10,8,20,0.85)";
     ctx.fillRect(0, 0, W, H);
     ctx.fillStyle = "rgba(30,20,50,0.96)";
-    drawRounded(W / 2 - 300, 50, 600, 440, 14);
+    drawRounded(px, py, pw, ph, 14);
     ctx.fill();
     ctx.strokeStyle = "#ff9a3c";
     ctx.lineWidth = 2;
-    drawRounded(W / 2 - 300, 50, 600, 440, 14);
+    drawRounded(px, py, pw, ph, 14);
     ctx.stroke();
     ctx.textAlign = "center";
     ctx.fillStyle = "#ffb347";
     ctx.font = font(20, "bold");
-    ctx.fillText("Glossary · H", W / 2, 85);
-    ctx.fillStyle = "#c8b8d8";
-    ctx.font = font(13);
-    ctx.textAlign = "left";
-    const lines = [
-      "Street Cred — community trust; Grassroots loves this.",
-      "Donor Trust — moneyed access; Money Machine fuel.",
-      "Press Heat — scandal/viral risk; Chaos thrives here.",
-      "Coalition — 2 of 3 matching voter blocs for bonuses.",
-      "Rival spat — recruiting enemies of each other lowers loyalty.",
-      "Board rule — daily civic memo that tweaks prices/recruit.",
-      "Crisis — daily headline; changes button costs, etc.",
-      "Setpieces — Debate, Leak, March, Gala on specific days.",
-      "Districts unlock: Media D2 · Campus D3 · Donors D4.",
-      "Mayor Mandate / Leon Rocket are local/tech — not presidential.",
-      "Soft NG+ — strong weeks bank start coins next New Week.",
-      "Save files 1–3: Enter continue · N new (overwrite) · Del erase.",
-      "Daily recruit goals reset each morning (new joins only).",
-      "If few blocs remain, the daily target shrinks automatically.",
-      "Blocs need FAVOR from annoying errands — chat alone won't convert them.",
-      "Failed pitches after favor can cost a favor point. Grind again.",
-      "Park + 8¢ cools a spat. Pigeons ×3 whisper. Booth photo once/day.",
-      "Coalition form day: cheaper buttons + recruit tip. Headlines are flavor.",
-      "Composure 💢 meter fills from bureaucracy & neighbors. At 100 you BURST.",
-      "Clara Catwell monologues (E to click through). Karen raises anxiety. Doug steals ¢.",
-      "Park and coffee cool the meter. Don't explode on Election Eve.",
-    ];
-    lines.forEach((line, i) => {
-      ctx.fillText("· " + line, W / 2 - 270, 120 + i * 26);
+    ctx.fillText("Glossary · H", W / 2, 58);
+
+    GLOSSARY_TABS.forEach((tab, ti) => {
+      const tx = px + 15 + ti * 175;
+      const on = glossaryTab === tab.id;
+      ctx.fillStyle = on ? "rgba(255,154,60,0.25)" : "rgba(40,30,60,0.8)";
+      drawRounded(tx, 72, 165, 26, 8);
+      ctx.fill();
+      ctx.fillStyle = on ? "#ffb347" : "#a090b8";
+      ctx.font = font(11, "bold");
+      ctx.textAlign = "center";
+      ctx.fillText(tab.label, tx + 82, 89);
     });
+
+    ctx.textAlign = "left";
+    const rowH = 20;
+    const col1X = px + 20,
+      col2X = px + 20 + pw / 2;
+    let y = 128;
+    const row = (x, label, sub, color) => {
+      if (y > panelBottom) return;
+      ctx.fillStyle = color || "#ffd9a0";
+      ctx.font = font(12, "bold");
+      fitText(label, x, y, pw / 2 - 40, "left");
+      ctx.fillStyle = "#a89ab8";
+      ctx.font = font(10);
+      fitText(sub || "", x, y + 12, pw / 2 - 40, "left");
+      y += rowH * 1.7;
+    };
+    const header = (x, text) => {
+      if (y > panelBottom) return;
+      ctx.fillStyle = "#c080ff";
+      ctx.font = font(11, "bold");
+      ctx.fillText(text.toUpperCase(), x, y);
+      y += rowH * 0.9;
+    };
+    const single = (x, label, color) => {
+      if (y > panelBottom) return;
+      ctx.fillStyle = color || "#e0d8ec";
+      ctx.font = font(11);
+      fitText(label, x, y, pw / 2 - 40, "left");
+      y += 18;
+    };
+
+    if (glossaryTab === "cast") {
+      CHARACTERS.forEach((c) => {
+        if (c.secret && !isCharUnlocked(c.id)) return; // never spoil secret cast
+        const unlocked = isCharUnlocked(c.id);
+        row(col1X, unlocked ? c.name + (c.secret ? " ✦" : "") : "??? (locked cast slot)", unlocked ? `${c.power} — ${c.blurb}` : "Unlock via Boards · Milestones.");
+      });
+    } else if (glossaryTab === "npcs") {
+      const half = Math.ceil(NPCS.length / 2);
+      const y0 = y;
+      NPCS.slice(0, half).forEach((n) => {
+        const line = (n.lines && (n.lines.default || (n.lines.monologues && n.lines.monologues[0] && n.lines.monologues[0][0]))) || "";
+        row(col1X, n.name, line);
+      });
+      y = y0;
+      NPCS.slice(half).forEach((n) => {
+        const line = (n.lines && (n.lines.default || (n.lines.monologues && n.lines.monologues[0] && n.lines.monologues[0][0]))) || "";
+        row(col2X, n.name, line);
+      });
+    } else if (glossaryTab === "locations") {
+      const y0 = y;
+      DISTRICTS.slice(0, 1).forEach((d) => {
+        header(col1X, d.name);
+        ZONES.filter((z) => z.district === d.id && !z.transit).forEach((z) => single(col1X, z.name));
+      });
+      y = y0;
+      DISTRICTS.slice(1).forEach((d) => {
+        header(col2X, d.name);
+        ZONES.filter((z) => z.district === d.id && !z.transit).forEach((z) => single(col2X, z.name));
+      });
+    } else if (glossaryTab === "blocs") {
+      const half = Math.ceil(VOTER_GROUPS.length / 2);
+      const y0 = y;
+      VOTER_GROUPS.slice(0, half).forEach((v) => row(col1X, `${v.icon} ${v.name}`, v.bonus, v.color));
+      y = y0;
+      VOTER_GROUPS.slice(half).forEach((v) => row(col2X, `${v.icon} ${v.name}`, v.bonus, v.color));
+    }
+
     ctx.textAlign = "center";
     ctx.fillStyle = "#8878a8";
-    ctx.fillText("Esc / H — close", W / 2, 460);
+    ctx.font = font(11);
+    ctx.fillText("Tab / click tabs · Esc/H close", W / 2, py + ph - 12);
   }
 
   function drawCredits() {
@@ -6140,6 +6205,7 @@
           showCredits = false;
           showGallery = false;
           showCodex = false;
+          glossaryTab = "cast";
         }
         e.preventDefault();
       }
@@ -6169,6 +6235,11 @@
       }
       if (showGallery && (e.key === "Tab" || e.key === "m" || e.key === "M")) {
         galleryTab = galleryTab === "achieve" ? "miles" : "achieve";
+        e.preventDefault();
+      }
+      if (showGlossary && e.key === "Tab") {
+        const i = GLOSSARY_TABS.findIndex((t) => t.id === glossaryTab);
+        glossaryTab = GLOSSARY_TABS[(i + 1) % GLOSSARY_TABS.length].id;
         e.preventDefault();
       }
       return;
@@ -6412,6 +6483,17 @@
         galleryTab = mx < W / 2 ? "achieve" : "miles";
       } else {
         showGallery = false;
+      }
+      if (fromTouch && e.cancelable) e.preventDefault();
+      return true;
+    }
+    if (showGlossary) {
+      const px = W / 2 - 360;
+      if (my >= 72 && my <= 98) {
+        const ti = Math.floor((mx - (px + 15)) / 175);
+        if (ti >= 0 && ti < GLOSSARY_TABS.length) glossaryTab = GLOSSARY_TABS[ti].id;
+      } else {
+        showGlossary = false;
       }
       if (fromTouch && e.cancelable) e.preventDefault();
       return true;
@@ -7107,6 +7189,21 @@
       },
       get optionsBars() {
         return optionsBars.map((b) => ({ ...b }));
+      },
+      openGlossary() {
+        showGlossary = true;
+        glossaryTab = "cast";
+        return showGlossary;
+      },
+      get showGlossary() {
+        return showGlossary;
+      },
+      get glossaryTab() {
+        return glossaryTab;
+      },
+      setGlossaryTab(id) {
+        glossaryTab = id;
+        return glossaryTab;
       },
       get musicVol() {
         return musicVol;
