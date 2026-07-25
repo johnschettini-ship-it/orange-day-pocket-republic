@@ -5392,7 +5392,7 @@
       const nMainMs = mainRoster().filter((c) => isCharUnlocked(c.id)).length;
       const nSecretMs = secretRoster().filter((c) => isCharUnlocked(c.id)).length;
       ctx.fillText(
-        `Weeks cleared: ${meta.weeksCleared || 0} · Best voters/week: ${meta.maxVotersOneWeek || 0} · Cast: ${nMainMs}/6 main · ${nSecretMs}/4 secret`,
+        `Weeks cleared: ${meta.weeksCleared || 0} · Best voters/week: ${meta.maxVotersOneWeek || 0} · Cast: ${nMainMs}/6 main · ${nSecretMs ? nSecretMs + "/4 secret" : "??? secret"}`,
         W / 2 - 330,
         120
       );
