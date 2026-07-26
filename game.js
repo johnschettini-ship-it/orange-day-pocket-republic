@@ -557,6 +557,7 @@
   let introT = 0; // seconds into cold-open
   const INTRO_DUR = 5.5; // auto-advance to title
   let charIdx = 0;
+  let selectScroll = 0; // vertical scroll offset for the character-select grid
   let selected = null;
   let player = null;
   let cam = { x: 0, y: 0 };
@@ -5800,6 +5801,44 @@
     ctx.fillText(s + "…", x, y);
   }
 
+  // Shared select-grid geometry — draw and click hit-testing both read
+  // from this so they can't drift apart. viewTop/viewBottom bound a fixed
+  // 960x540-canvas viewport; more than 6 roster entries (main + unlocked
+  // secrets) overflow it, so content scrolls within that window instead
+  // of growing the card grid past the canvas edge with no way to reach it.
+  function selectLayout(rosterLen) {
+    const cols = 3,
+      cardW = 280,
+      cardH = 200,
+      gap = 16;
+    const totalW = cols * cardW + (cols - 1) * gap;
+    const startX = (W - totalW) / 2;
+    const viewTop = 70,
+      viewBottom = H - 30;
+    const rows = Math.max(1, Math.ceil(rosterLen / cols));
+    const contentH = rows * cardH + (rows - 1) * gap;
+    const maxScroll = Math.max(0, contentH - (viewBottom - viewTop));
+    return { cols, cardW, cardH, gap, startX, viewTop, viewBottom, maxScroll };
+  }
+  function selectCardRect(i, layout) {
+    const col = i % layout.cols,
+      row = Math.floor(i / layout.cols);
+    return {
+      x: layout.startX + col * (layout.cardW + layout.gap),
+      y: layout.viewTop + row * (layout.cardH + layout.gap) - selectScroll,
+    };
+  }
+  function selectScrollToShow(i, rosterLen) {
+    const layout = selectLayout(rosterLen);
+    const row = Math.floor(i / layout.cols);
+    const rowTop = row * (layout.cardH + layout.gap);
+    const rowBottom = rowTop + layout.cardH;
+    const viewH = layout.viewBottom - layout.viewTop;
+    if (rowTop < selectScroll) selectScroll = rowTop;
+    else if (rowBottom > selectScroll + viewH) selectScroll = rowBottom - viewH;
+    selectScroll = clamp(selectScroll, 0, layout.maxScroll);
+  }
+
   function drawSelect() {
     ctx.fillStyle = "#1a1430";
     ctx.fillRect(0, 0, W, H);
@@ -5813,25 +5852,23 @@
     if (charIdx >= roster.length) charIdx = 0;
     const nMain = mainRoster().filter((c) => isCharUnlocked(c.id)).length;
     const nSec = secretRoster().filter((c) => isCharUnlocked(c.id)).length;
+    const layout = selectLayout(roster.length);
+    selectScroll = clamp(selectScroll, 0, layout.maxScroll);
     ctx.fillText(
-      `← → · Enter · main ${nMain}/6` + (nSec ? ` · secrets ${nSec}/4` : "") + ` · G milestones`,
+      `← → · Enter · main ${nMain}/6` + (nSec ? ` · secrets ${nSec}/4` : "") + (layout.maxScroll ? ` · scroll for more` : "") + ` · G milestones`,
       W / 2,
       62
     );
 
-    const cols = 3;
-    const cardW = 280;
-    const cardH = 200;
-    const gap = 16;
-    const totalW = cols * cardW + (cols - 1) * gap;
-    const startX = (W - totalW) / 2;
-    const y0 = 70;
+    const { cardW, cardH, viewTop, viewBottom } = layout;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, viewTop, W, viewBottom - viewTop);
+    ctx.clip();
 
     roster.forEach((c, i) => {
-      const col = i % cols;
-      const row = Math.floor(i / cols);
-      const x = startX + col * (cardW + gap);
-      const y = y0 + row * (cardH + gap);
+      const { x, y } = selectCardRect(i, layout);
+      if (y + cardH < viewTop || y > viewBottom) return; // off-screen, skip
       const sel = i === charIdx;
       const unlocked = isCharUnlocked(c.id);
       // Secrets never show until unlocked (handled in selectRoster). Of the
@@ -5912,6 +5949,7 @@
 
       ctx.restore();
     });
+    ctx.restore(); // close the viewport clip opened above
 
     ctx.fillStyle = "#8878a8";
     ctx.font = "12px Segoe UI,sans-serif";
@@ -6411,6 +6449,9 @@
       const n = Math.max(1, roster.length);
       if (e.key === "ArrowLeft" || e.key === "a" || e.key === "A") charIdx = (charIdx + n - 1) % n;
       if (e.key === "ArrowRight" || e.key === "d" || e.key === "D") charIdx = (charIdx + 1) % n;
+      if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") charIdx = (charIdx - 3 + n) % n;
+      if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") charIdx = (charIdx + 3) % n;
+      selectScrollToShow(charIdx, roster.length);
     }
     if (state === "play") {
       if (e.key === "e" || e.key === "E") interact();
@@ -6592,19 +6633,11 @@
     }
     if (state === "select") {
       const roster = selectRoster();
-      const cols = 3,
-        cardW = 280,
-        cardH = 200,
-        gap = 16,
-        y0 = 70;
-      const totalW = cols * cardW + (cols - 1) * gap;
-      const startX = (W - totalW) / 2;
+      const layout = selectLayout(roster.length);
+      if (my < layout.viewTop || my > layout.viewBottom) return true; // click outside the grid viewport
       roster.forEach((c, i) => {
-        const col = i % cols;
-        const row = Math.floor(i / cols);
-        const x = startX + col * (cardW + gap);
-        const y = y0 + row * (cardH + gap);
-        if (mx >= x && mx <= x + cardW && my >= y && my <= y + cardH) {
+        const { x, y } = selectCardRect(i, layout);
+        if (mx >= x && mx <= x + layout.cardW && my >= y && my <= y + layout.cardH) {
           charIdx = i;
           if (!isCharUnlocked(c.id)) {
             toast("Locked — check Boards · Milestones (G) to see how.");
@@ -6635,6 +6668,17 @@
   canvas.addEventListener("click", (e) => {
     handleCanvasPointer(e, false);
   });
+  canvas.addEventListener(
+    "wheel",
+    (e) => {
+      if (state !== "select") return;
+      const roster = selectRoster();
+      const layout = selectLayout(roster.length);
+      selectScroll = clamp(selectScroll + Math.sign(e.deltaY) * 60, 0, layout.maxScroll);
+      e.preventDefault();
+    },
+    { passive: false }
+  );
   // Mobile: touchend is more reliable than synthetic click for in-canvas pause buttons
   canvas.addEventListener(
     "touchend",
@@ -7215,6 +7259,15 @@
       },
       get showGallery() {
         return showGallery;
+      },
+      get selectScroll() {
+        return selectScroll;
+      },
+      get charIdx() {
+        return charIdx;
+      },
+      selectLayout(n) {
+        return selectLayout(n);
       },
       get showPause() {
         return state === "pause";
