@@ -4614,7 +4614,7 @@
     ctx.textAlign = "left";
     ctx.font = "bold 12px Cascadia Mono,monospace";
     ctx.fillStyle = vCount ? "#d8d0e8" : "#a098b0";
-    ctx.fillText(`Voters: ${vCount}/12`, 568, 24);
+    ctx.fillText(`Voters: ${vCount}`, 568, 24);
     voters.forEach((id, i) => {
       if (i >= 6) return; // cap icons so we don't overrun Tool price
       const g = VOTER_GROUPS.find((v) => v.id === id);
