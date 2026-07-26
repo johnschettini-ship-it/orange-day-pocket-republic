@@ -4809,47 +4809,6 @@
       );
     }
 
-    // toast — word-wrapped; larger on touch screens where the canvas shrinks
-    if (msgT > 0 && msg) {
-      ctx.globalAlpha = clamp(msgT > 0.3 ? 1 : msgT / 0.3, 0, 1);
-      const fs = IS_COARSE ? 20 : 14;
-      const lineH = fs + 6;
-      ctx.font = (IS_COARSE ? "600 " : "") + fs + "px Segoe UI,sans-serif";
-      const maxTextW = (IS_COARSE ? W - 80 : 720) - 48;
-      const words = String(msg).split(" ");
-      const lines = [];
-      let line = "";
-      for (const wd of words) {
-        const test = line ? line + " " + wd : wd;
-        if (line && ctx.measureText(test).width > maxTextW) {
-          lines.push(line);
-          line = wd;
-          if (lines.length === 3) break;
-        } else {
-          line = test;
-        }
-      }
-      if (line && lines.length < 3) lines.push(line);
-      let widest = 0;
-      for (const l of lines) widest = Math.max(widest, ctx.measureText(l).width);
-      const tw = Math.max(180, widest + 48);
-      const th = lines.length * lineH + 22;
-      const tx = W / 2 - tw / 2;
-      const ty = H - 40 - th;
-      ctx.fillStyle = "rgba(25,14,36,0.92)";
-      drawRounded(tx, ty, tw, th, 12);
-      ctx.fill();
-      ctx.strokeStyle = "rgba(255,160,60,0.45)";
-      ctx.lineWidth = 2;
-      ctx.stroke();
-      ctx.fillStyle = "#fff8e8";
-      ctx.textAlign = "center";
-      lines.forEach((l, i) => {
-        ctx.fillText(l, W / 2, ty + 15 + fs * 0.5 + i * lineH);
-      });
-      ctx.globalAlpha = 1;
-    }
-
     // near-night warning
     if (time >= NIGHT_AT - 0.08 && time < NIGHT_AT) {
       ctx.fillStyle = "rgba(255,80,80,0.85)";
@@ -4867,6 +4826,53 @@
     if (buttons) inv.push(`🔘×${buttons}`);
     if (toolLevel) inv.push("🔧+");
     if (inv.length) ctx.fillText(inv.join("  "), 12, H - 12);
+  }
+
+  // Drawn last in frame() — always the topmost layer. Previously lived
+  // inside drawHUD(), which runs BEFORE drawPause()/drawOptions()/etc.,
+  // so any toast fired from a menu (e.g. Load's "Loaded."/"No save to
+  // load." feedback) rendered underneath that menu's opaque panel and
+  // was completely invisible — the action worked, but looked like nothing
+  // happened.
+  function drawToast() {
+    if (!(msgT > 0 && msg)) return;
+    ctx.globalAlpha = clamp(msgT > 0.3 ? 1 : msgT / 0.3, 0, 1);
+    const fs = IS_COARSE ? 20 : 14;
+    const lineH = fs + 6;
+    ctx.font = (IS_COARSE ? "600 " : "") + fs + "px Segoe UI,sans-serif";
+    const maxTextW = (IS_COARSE ? W - 80 : 720) - 48;
+    const words = String(msg).split(" ");
+    const lines = [];
+    let line = "";
+    for (const wd of words) {
+      const test = line ? line + " " + wd : wd;
+      if (line && ctx.measureText(test).width > maxTextW) {
+        lines.push(line);
+        line = wd;
+        if (lines.length === 3) break;
+      } else {
+        line = test;
+      }
+    }
+    if (line && lines.length < 3) lines.push(line);
+    let widest = 0;
+    for (const l of lines) widest = Math.max(widest, ctx.measureText(l).width);
+    const tw = Math.max(180, widest + 48);
+    const th = lines.length * lineH + 22;
+    const tx = W / 2 - tw / 2;
+    const ty = H - 40 - th;
+    ctx.fillStyle = "rgba(25,14,36,0.92)";
+    drawRounded(tx, ty, tw, th, 12);
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,160,60,0.45)";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.fillStyle = "#fff8e8";
+    ctx.textAlign = "center";
+    lines.forEach((l, i) => {
+      ctx.fillText(l, W / 2, ty + 15 + fs * 0.5 + i * lineH);
+    });
+    ctx.globalAlpha = 1;
   }
 
   function drawSeasonWeather() {
@@ -6145,6 +6151,7 @@
     if (showGallery) drawGallery();
     if (showGlossary) drawGlossary();
     if (showConversations) drawConversations();
+    drawToast();
   }
 
   // ─── Input ───────────────────────────────────────────────────
@@ -6258,7 +6265,10 @@
       return;
     }
     if (showCredits) {
-      if (e.key === "Escape" || e.key === "i" || e.key === "I") {
+      // "i"/"I" is intentionally NOT handled here — the global toggle above
+      // (line ~6191) already opens/closes Credits on I. Closing it again
+      // here on the same keypress undid the open before it ever rendered.
+      if (e.key === "Escape") {
         showCredits = false;
         e.preventDefault();
       }
@@ -6435,15 +6445,17 @@
         }
       }
     } else if (state === "pause") {
+      // o/g/h/i are deliberately NOT handled here — the global toggles
+      // above (o/g/h/i near the top of this handler) already open these
+      // panels from any state, pause included. Duplicating them here meant
+      // a second press (meant to close the panel) hit this branch instead
+      // of the panel's own check-block, silently reopening what the
+      // toggle had just closed.
       if (e.key === "Escape") pauseAction("resume");
       else if (e.key === "s" || e.key === "S") pauseAction("save");
       else if (e.key === "l" || e.key === "L") pauseAction("load");
       else if (e.key === "r" || e.key === "R") pauseAction("restart");
       else if (e.key === "q" || e.key === "Q") pauseAction("quit");
-      else if (e.key === "o" || e.key === "O") pauseAction("options");
-      else if (e.key === "g" || e.key === "G") pauseAction("gallery");
-      else if (e.key === "h" || e.key === "H") pauseAction("glossary");
-      else if (e.key === "i" || e.key === "I") pauseAction("credits");
     }
   });
   window.addEventListener("keyup", (e) => {
@@ -7194,6 +7206,18 @@
       },
       get optionsBars() {
         return optionsBars.map((b) => ({ ...b }));
+      },
+      get showOptions() {
+        return showOptions;
+      },
+      get showCredits() {
+        return showCredits;
+      },
+      get showGallery() {
+        return showGallery;
+      },
+      get showPause() {
+        return state === "pause";
       },
       openGlossary() {
         showGlossary = true;
