@@ -5828,21 +5828,27 @@
       const y = y0 + row * (cardH + gap);
       const sel = i === charIdx;
       const unlocked = isCharUnlocked(c.id);
-      // secrets only appear when unlocked — treat as always unlocked here
-      const showUnlocked = unlocked || !!c.secret;
+      // Secrets never show until unlocked (handled in selectRoster). Of the
+      // main 6, the first 3 (Tiny/Alex/Mayor) always reveal identity even
+      // locked — only their playability is gated; Bernie/Leon/Donny stay
+      // a full "???" mystery until unlocked.
+      const idxInMain = c.secret ? -1 : mainRoster().indexOf(c);
+      const revealed = unlocked || !!c.secret || (idxInMain >= 0 && idxInMain < 3);
       const pad = 12;
       const innerW = cardW - pad * 2;
 
-      ctx.fillStyle = !showUnlocked
+      ctx.fillStyle = !revealed
         ? "rgba(20,16,30,0.92)"
         : sel
           ? c.secret
             ? "rgba(180,120,255,0.18)"
             : "rgba(255,140,40,0.2)"
-          : "rgba(40,30,60,0.92)";
+          : unlocked
+            ? "rgba(40,30,60,0.92)"
+            : "rgba(35,28,50,0.7)";
       drawRounded(x, y, cardW, cardH, 12);
       ctx.fill();
-      ctx.strokeStyle = sel ? (c.secret ? "#c080ff" : "#ff9a3c") : showUnlocked ? "#4a3a68" : "#333048";
+      ctx.strokeStyle = sel ? (c.secret ? "#c080ff" : "#ff9a3c") : revealed ? (unlocked ? "#4a3a68" : "#3a3050") : "#333048";
       ctx.lineWidth = sel ? 3 : 1;
       ctx.stroke();
 
@@ -5851,7 +5857,7 @@
       ctx.clip();
 
       const ab = Math.sin(animT * 3 + i) * 2;
-      if (showUnlocked) {
+      if (revealed) {
         if (
           !drawSprite(`player/${c.id}_down_idle`, x + 12, y + 24 + ab, 56, 70) &&
           !drawSprite(`player/${c.id}_idle`, x + 12, y + 24 + ab, 56, 70)
@@ -5860,6 +5866,16 @@
           ctx.beginPath();
           ctx.arc(x + 40, y + 55, 24, 0, Math.PI * 2);
           ctx.fill();
+        }
+        if (!unlocked) {
+          ctx.fillStyle = "rgba(10,8,16,0.75)";
+          ctx.beginPath();
+          ctx.arc(x + 40, y + 55, 15, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = "#ccc";
+          ctx.font = "bold 16px Segoe UI,sans-serif";
+          ctx.textAlign = "center";
+          ctx.fillText("🔒", x + 40, y + 61);
         }
       } else {
         ctx.fillStyle = "#2a2438";
@@ -5873,23 +5889,19 @@
       }
 
       ctx.textAlign = "left";
-      ctx.fillStyle = showUnlocked ? "#fff" : "#777";
+      ctx.fillStyle = revealed ? (unlocked ? "#fff" : "#ccc") : "#777";
       ctx.font = "bold 14px Segoe UI,sans-serif";
-      fitText(showUnlocked ? c.name + (c.secret ? " ✦" : "") : "???", x + 80, y + 42, innerW - 70, "left");
-      if (showUnlocked) {
+      fitText(revealed ? c.name + (c.secret ? " ✦" : "") : "???", x + 80, y + 42, innerW - 70, "left");
+      if (revealed) {
         ctx.fillStyle = c.accent;
         ctx.font = "bold 11px Segoe UI,sans-serif";
         fitText(c.power, x + 80, y + 60, innerW - 70, "left");
         ctx.fillStyle = "#c8b8d8";
         ctx.font = "11px Segoe UI,sans-serif";
         wrapText(c.blurb, x + 80, y + 80, innerW - 70, 14, 3, "left");
-        ctx.fillStyle = "#e0a0a0";
+        ctx.fillStyle = unlocked ? "#e0a0a0" : "#8878a8";
         ctx.font = "10px Segoe UI,sans-serif";
-        wrapText("Weak: " + c.weakness, x + pad, y + cardH - 28, innerW, 13, 2, "left");
-      } else {
-        ctx.fillStyle = "#9988aa";
-        ctx.font = "11px Segoe UI,sans-serif";
-        wrapText(charUnlockHint(c.id).replace(/^🔒\s*/, ""), x + 80, y + 70, innerW - 70, 14, 4, "left");
+        wrapText(unlocked ? "Weak: " + c.weakness : "Locked — check Boards · Milestones (G).", x + pad, y + cardH - 28, innerW, 13, 2, "left");
       }
 
       ctx.restore();
@@ -5901,7 +5913,7 @@
     const cur = roster[charIdx];
     if (cur && !isCharUnlocked(cur.id) && !cur.secret) {
       ctx.fillStyle = "#e0a080";
-      ctx.fillText(charUnlockHint(cur.id) + " · G for milestone board", W / 2, H - 18);
+      ctx.fillText("Locked — check Boards · Milestones (G) to see how.", W / 2, H - 18);
     } else {
       ctx.fillText("Enter to start · secrets appear only after easter eggs", W / 2, H - 18);
     }
@@ -6361,7 +6373,7 @@
         if (charIdx >= roster.length) charIdx = 0;
         const pick = roster[charIdx];
         if (!pick || !isCharUnlocked(pick.id)) {
-          toast(pick ? charUnlockHint(pick.id) : "Pick a citizen.");
+          toast(pick ? "Locked — check Boards · Milestones (G) to see how." : "Pick a citizen.");
           sfx("warn");
           e.preventDefault();
         } else {
@@ -6583,7 +6595,7 @@
         if (mx >= x && mx <= x + cardW && my >= y && my <= y + cardH) {
           charIdx = i;
           if (!isCharUnlocked(c.id)) {
-            toast(charUnlockHint(c.id));
+            toast("Locked — check Boards · Milestones (G) to see how.");
             sfx("warn");
           } else {
             resetRun(c);
@@ -6784,14 +6796,6 @@
 
   function isCharUnlocked(id) {
     return !!(meta.unlockedChars && meta.unlockedChars[id]);
-  }
-
-  function charUnlockHint(id) {
-    if (isCharUnlocked(id)) return "";
-    // Prefer first unfinished non-secret path listed in data (easier paths first)
-    const paths = MILESTONES.filter((m) => (m.unlocks || []).includes(id) && !m.auto && !m.secret);
-    const open = paths.find((m) => !meta.milestones[m.id]) || paths[0];
-    return open ? "🔒 " + open.desc : "🔒 Locked";
   }
 
   function evaluateMilestones(announce) {
