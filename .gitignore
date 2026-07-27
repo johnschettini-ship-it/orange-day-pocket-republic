@@ -1,0 +1,16 @@
+# Internal agent-coordination docs and QA tooling — never ship to the
+# public repo. Verified against what's actually tracked in origin/main's
+# docs/ folder (not just PACKAGING.md's list, which was slightly stale).
+.agents/
+.grok/
+AGENTS.md
+tools/
+smoke.js
+docs/PLAN-1.0.md
+docs/PLAN-1.1.md
+docs/PLAN-1.2.md
+docs/POSTMORTEM-v1.0.md
+docs/PRESS.md
+docs/STYLE.md
+releases/
+node_modules/
