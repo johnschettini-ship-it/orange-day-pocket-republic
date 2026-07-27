@@ -667,13 +667,22 @@
     reelection: { label: "Present the record and return to voters", steps: ["booth", "stage", "home"], readiness: 0 },
   };
 
-  function calendarSeason() {
-    const m = new Date().getMonth();
-    return m <= 1 || m === 11 ? "winter" : m <= 4 ? "spring" : m <= 7 ? "summer" : "fall";
+  // In-game season order — rotates with the campaign's own chapter
+  // timeline, not the real-world calendar. A fresh campaign starts on a
+  // random season (like shuffleDayEvents() picks a random daily-event
+  // arrangement); each chapter advance steps to the next season in the
+  // cycle, wrapping after fall.
+  const SEASON_ORDER = ["winter", "spring", "summer", "fall"];
+  function randomSeason() {
+    return SEASON_ORDER[Math.floor(Math.random() * SEASON_ORDER.length)];
+  }
+  function nextSeason(s) {
+    const i = SEASON_ORDER.indexOf(s);
+    return SEASON_ORDER[(Math.max(0, i) + 1) % SEASON_ORDER.length];
   }
 
   function newCampaign(season) {
-    const key = CAMPAIGN_SEASONS[season] ? season : calendarSeason();
+    const key = CAMPAIGN_SEASONS[season] ? season : randomSeason();
     const loyalty = {};
     VOTER_GROUPS.forEach((v) => (loyalty[v.id] = 50));
     ["families", "business", "fans", "street"].forEach((id) => (loyalty[id] = 50));
@@ -700,7 +709,7 @@
   }
 
   function campaignSeason() {
-    return CAMPAIGN_SEASONS[(campaign && campaign.season) || calendarSeason()] || {};
+    return CAMPAIGN_SEASONS[(campaign && campaign.season) || "summer"] || {};
   }
 
   function campaignMaxDays() {
@@ -3618,6 +3627,7 @@
         return true;
       }
       campaign.chapter += 1;
+      campaign.season = nextSeason(campaign.season);
       const char = selected;
       resetRun(char, true);
       beginChapterIntro();
@@ -7062,7 +7072,10 @@
       },
       advanceChapter() {
         if (campaign.chapter >= CAMPAIGN_CHAPTERS.length - 1) campaign.complete = true;
-        else campaign.chapter += 1;
+        else {
+          campaign.chapter += 1;
+          campaign.season = nextSeason(campaign.season);
+        }
         initChapterMission();
         setCampaignDaySeconds();
         return campaignView();
