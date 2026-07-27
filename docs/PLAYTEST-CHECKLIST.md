@@ -70,6 +70,10 @@ For every row, play the mission in the world before resolving its decision.
 
 ## Sign-off
 
+This table records the **human** pass. It is deliberately still blank —
+automated coverage does not satisfy it. See the automated-coverage note below
+for what has already been verified headlessly and what genuinely needs a human.
+
 | Field | Value |
 |---|---|
 | Build | v1.4 |
@@ -80,6 +84,25 @@ For every row, play the mission in the world before resolving its decision.
 | Result | GO / NO-GO |
 | P0/P1 issues | |
 | Notes | |
+
+### Automated coverage (2026-07-27, not a substitute for the above)
+
+`node smoke.js` **GO — failures: 0** and `node tools/playtest_auto.js` **GO
+(26/26)** as of the v1.4 finish-out. The `phase29` block in `smoke.js` already
+asserts, headlessly:
+
+- every chapter's mission metric gates success/failure (rows in *Seven-chapter career*)
+- all five chapter fieldwork mechanics resolve and bump their metric
+- Reelection `requires` options lock, unlock, are skipped when cycling, and lift
+  entirely if no option qualifies (C3)
+- the real decision → exit → legacy control flow reaches the Civic Legacy screen (L5)
+- loss keeps the save active as Opposition Organizer, and comeback restores office (L1, L3)
+
+**Still needs a human** — these are judgment/feel checks no headless harness can make:
+per-chapter music actually sounding distinct; dimmed/locked Reelection options
+reading clearly at real canvas sizes; Civic Legacy screen layout; whether the
+fieldwork cooldown feels spammy or too sparse; and every row in *Accessibility
+and soft-lock watch*.
 
 Only `orange-director` marks the phase **GO**. Log the human result in
 `.agents/playtest-log.md`.

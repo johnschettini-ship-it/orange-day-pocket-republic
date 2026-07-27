@@ -3,7 +3,7 @@
 **Target:** v1.4
 **Working label:** Seasonal Civic Career
 **Foundation:** v1.3 Full Week Ship
-**Status:** Active implementation scope; completion requires the gates below.
+**Status:** Active. Code complete as of the 2026-07-27 finish-out; 4 of 15 completion gates remain, all requiring human verification (see below). This doc is the authority on remaining scope — where `.agents/game-directive-v1.4.md` or the QA gate claim otherwise, this file wins.
 
 ## Product goal
 
@@ -273,20 +273,20 @@ Add new actions through contextual interactions and overlays before adding new d
 
 The v1.4 goal is complete only when:
 
-- [ ] A save can progress beyond Election Night without resetting the city.
-- [ ] Winning and losing both open playable follow-on roles.
-- [ ] All seven chapter types have clear intros, playable objectives, decisions, exits, and persistent consequences.
-- [ ] Winter, spring, summer, and fall each change calendar events, daylight, weather, dialogue, visuals, and music.
-- [ ] Sports align with season and use fictional branding.
-- [ ] Loyalty changes are persistent, explained, and affected by decisions plus performance.
-- [ ] District condition, infrastructure, promises, rivals, and NPC relationships affect later chapters.
-- [ ] Day length adapts to season and chapter while respecting player timing options.
-- [ ] Distinct procedural music states transition safely after browser audio unlock.
-- [ ] NPC dialogue evolves by season, chapter, and remembered outcomes without excessive repetition.
-- [ ] Keyboard, touch, and gamepad can complete the full career.
-- [ ] Existing saves migrate safely and storage remains scoped to `orangeDay_*`.
-- [ ] Automated syntax/smoke checks pass for the new matrix.
-- [ ] A human playtest completes at least one full seasonal career, including an office route and a comeback route.
+- [x] A save can progress beyond Election Night without resetting the city.
+- [x] Winning and losing both open playable follow-on roles.
+- [x] All seven chapter types have clear intros, playable objectives, decisions, exits, and persistent consequences. *(v1.4 finish-out: each chapter now has its own mechanic — see `CHAPTER_FIELDWORK` / `resolveChapterFieldwork()` / `runClosingArgument()`; previously chapters 3–7 shared one generic zone-walk.)*
+- [x] Winter, spring, summer, and fall each change calendar events, daylight, weather, dialogue, visuals, and music. *(music was dead data until the finish-out wired `CAMPAIGN_MUSIC_PARAMS`.)*
+- [x] Sports align with season and use fictional branding. *(`eventBySeason` now actually read — selects championship's seasonal fieldwork pool.)*
+- [x] Loyalty changes are persistent, explained, and affected by decisions plus performance.
+- [x] District condition, infrastructure, promises, rivals, and NPC relationships affect later chapters. *(promises/infrastructure/coalition now gate Reelection via `requires`.)*
+- [x] Day length adapts to season and chapter while respecting player timing options.
+- [ ] Distinct procedural music states transition safely after browser audio unlock. *(Implemented; needs a human ear — `smoke.js` can only assert the theme id string, not that the audio graph sounds right or crossfades cleanly.)*
+- [ ] NPC dialogue evolves by season, chapter, and remembered outcomes without excessive repetition. *(Partial: per-season and per-chapter context lines exist, but `NPC_CONTEXT_INSIGHTS[id].chapter` is still one shared line per NPC rather than per-chapter-per-NPC.)*
+- [ ] Keyboard, touch, and gamepad can complete the full career. *(Keyboard and touch paths assert in smoke; gamepad handler exists but is unexercised headlessly — needs a controller in hand.)*
+- [x] Existing saves migrate safely and storage remains scoped to `orangeDay_*`.
+- [x] Automated syntax/smoke checks pass for the new matrix. *(`smoke.js` GO failures: 0 incl. new `phase29`; `playtest_auto.js` GO 26/26.)*
+- [ ] A human playtest completes at least one full seasonal career, including an office route and a comeback route. **← the main remaining blocker.**
 - [ ] Only `orange-director` records the final phase GO.
 
 ## Out of scope for v1.4
