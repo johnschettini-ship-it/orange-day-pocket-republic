@@ -601,6 +601,9 @@
   let selectScroll = 0; // vertical scroll offset for the character-select grid
   let milestoneScroll = 0; // vertical scroll offset for the Boards milestones list
   let achievementScroll = 0; // vertical scroll offset for the Boards achievements grid
+  let voterCodexScroll = 0; // vertical scroll offset for the in-HUD Voter Codex panel (C)
+  let resultsVoterScroll = 0; // vertical scroll offset for the results screen's Voter Coalition list
+  let glossaryScroll = 0; // vertical scroll offset for the Glossary panel (shared across its 4 tabs)
   let selected = null;
   let player = null;
   let cam = { x: 0, y: 0 };
@@ -5012,10 +5015,17 @@
       ctx.fillText("Voter Codex  (C)", cx + 12, cy + 22);
       ctx.fillStyle = "#a090b8";
       ctx.font = "11px Segoe UI,sans-serif";
-      ctx.fillText(`${Object.keys(codexSeen).length}/12 known · scandals ${scandals.length}`, cx + 12, cy + 40);
+      ctx.fillText(`${Object.keys(codexSeen).length}/${VOTER_GROUPS.length} known · scandals ${scandals.length}`, cx + 12, cy + 40);
+      const codexLayout = voterCodexListLayout(VOTER_GROUPS.length);
+      voterCodexScroll = clamp(voterCodexScroll, 0, codexLayout.maxScroll);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(cx, codexLayout.viewTop - 14, cw, codexLayout.viewBottom - codexLayout.viewTop + 14);
+      ctx.clip();
       VOTER_GROUPS.forEach((g, i) => {
         const known = !!codexSeen[g.id] || voters.includes(g.id) || favorOf(g.id) > 0;
-        const y = cy + 58 + i * 26;
+        const y = codexLayout.viewTop + i * codexLayout.rowH - voterCodexScroll;
+        if (y < codexLayout.viewTop - codexLayout.rowH || y > codexLayout.viewBottom) return;
         ctx.fillStyle = known ? g.color : "#555";
         ctx.font = "12px Segoe UI,sans-serif";
         fitText(known ? `${g.icon} ${g.name}` : "??? · ???", cx + 12, y, 170, "left");
@@ -5031,13 +5041,14 @@
           ctx.fillText(`${fav}/${need}`, cx + 230, y);
         }
       });
+      ctx.restore();
       ctx.fillStyle = "#8878a8";
       ctx.font = "10px sans-serif";
       const tipG = boardTipId && VOTER_GROUPS.find((v) => v.id === boardTipId);
       fitText(
-        tipG
+        (tipG
           ? `Board tip: ${tipG.name} · Favor=errands · ⚠=loyalty soft`
-          : "Favor=errands · IN/⚠=joined · Rival poaches soft loyalty",
+          : "Favor=errands · IN/⚠=joined · Rival poaches soft loyalty") + (codexLayout.maxScroll ? " · scroll" : ""),
         cx + 12,
         cy + ch - 16,
         cw - 24,
@@ -5771,30 +5782,41 @@
     const rowH = 20;
     const col1X = px + 20,
       col2X = px + 20 + pw / 2;
-    let y = 128;
+    const viewTop = 128,
+      viewBottom = panelBottom - 8;
+    const glossLayout = glossaryListLayout(glossaryTab);
+    glossaryScroll = clamp(glossaryScroll, 0, glossLayout.maxScroll);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(px, viewTop - 20, pw, viewBottom - viewTop + 20);
+    ctx.clip();
+    let y = viewTop - glossaryScroll;
     const row = (x, label, sub, color, w) => {
-      if (y > panelBottom) return;
-      const maxW = w || pw / 2 - 40;
-      ctx.fillStyle = color || "#ffd9a0";
-      ctx.font = font(12, "bold");
-      fitText(label, x, y, maxW, "left");
-      ctx.fillStyle = "#a89ab8";
-      ctx.font = font(10);
-      fitText(sub || "", x, y + 12, maxW, "left");
+      if (y >= viewTop - 24 && y <= viewBottom) {
+        const maxW = w || pw / 2 - 40;
+        ctx.fillStyle = color || "#ffd9a0";
+        ctx.font = font(12, "bold");
+        fitText(label, x, y, maxW, "left");
+        ctx.fillStyle = "#a89ab8";
+        ctx.font = font(10);
+        fitText(sub || "", x, y + 12, maxW, "left");
+      }
       y += rowH * 1.7;
     };
     const header = (x, text) => {
-      if (y > panelBottom) return;
-      ctx.fillStyle = "#c080ff";
-      ctx.font = font(11, "bold");
-      ctx.fillText(text.toUpperCase(), x, y);
+      if (y >= viewTop - 24 && y <= viewBottom) {
+        ctx.fillStyle = "#c080ff";
+        ctx.font = font(11, "bold");
+        ctx.fillText(text.toUpperCase(), x, y);
+      }
       y += rowH * 0.9;
     };
     const single = (x, label, color) => {
-      if (y > panelBottom) return;
-      ctx.fillStyle = color || "#e0d8ec";
-      ctx.font = font(11);
-      fitText(label, x, y, pw / 2 - 40, "left");
+      if (y >= viewTop - 24 && y <= viewBottom) {
+        ctx.fillStyle = color || "#e0d8ec";
+        ctx.font = font(11);
+        fitText(label, x, y, pw / 2 - 40, "left");
+      }
       y += 18;
     };
 
@@ -5834,11 +5856,12 @@
       y = y0;
       VOTER_GROUPS.slice(half).forEach((v) => row(col2X, `${v.icon} ${v.name}`, v.bonus, v.color));
     }
+    ctx.restore();
 
     ctx.textAlign = "center";
     ctx.fillStyle = "#8878a8";
     ctx.font = font(11);
-    ctx.fillText("Tab / click tabs · Esc/H close", W / 2, py + ph - 12);
+    ctx.fillText("Tab / click tabs · Esc/H close" + (glossLayout.maxScroll ? " · scroll for more" : ""), W / 2, py + ph - 12);
   }
 
   function drawCredits() {
@@ -6110,6 +6133,49 @@
     const contentH = rows * rowH;
     const maxScroll = Math.max(0, contentH - (viewBottom - viewTop));
     return { cols, rowH, viewTop, viewBottom, maxScroll };
+  }
+  // In-HUD Voter Codex panel (C) — cy/ch match the panel's own drawn rect.
+  function voterCodexListLayout(count) {
+    const rowH = 26;
+    const viewTop = 144,
+      viewBottom = 458;
+    const contentH = count * rowH;
+    const maxScroll = Math.max(0, contentH - (viewBottom - viewTop));
+    return { rowH, viewTop, viewBottom, maxScroll };
+  }
+  // Results screen's "Voter Coalition" column — bounded above by the CTA button.
+  function resultsVoterListLayout(count) {
+    const rowH = 22;
+    const viewTop = 286,
+      viewBottom = 450;
+    const contentH = count * rowH;
+    const maxScroll = Math.max(0, contentH - (viewBottom - viewTop));
+    return { rowH, viewTop, viewBottom, maxScroll };
+  }
+  // Glossary's 4 tabs mix rows/headers/single-lines across up to 2 columns
+  // with per-row-type heights (34/18/16), so content height is computed
+  // directly from data counts rather than replaying the draw closures.
+  function glossaryListLayout(tab) {
+    const viewTop = 128,
+      viewBottom = 494; // matches drawGlossary's panelBottom(=502) - 8
+    const rowTall = 34,
+      rowShort = 18;
+    let contentH = 0;
+    if (tab === "cast") {
+      const n = CHARACTERS.filter((c) => !c.secret || isCharUnlocked(c.id)).length;
+      contentH = n * rowTall;
+    } else if (tab === "npcs") {
+      contentH = Math.ceil(NPCS.length / 2) * rowTall;
+    } else if (tab === "locations") {
+      const zonesOf = (d) => ZONES.filter((z) => z.district === d.id && !z.transit).length;
+      const col1H = DISTRICTS.slice(0, 1).reduce((sum, d) => sum + rowShort + zonesOf(d) * rowShort, 0);
+      const col2H = DISTRICTS.slice(1).reduce((sum, d) => sum + rowShort + zonesOf(d) * rowShort, 0);
+      contentH = Math.max(col1H, col2H);
+    } else if (tab === "blocs") {
+      contentH = Math.ceil(VOTER_GROUPS.length / 2) * rowTall;
+    }
+    const maxScroll = Math.max(0, contentH - (viewBottom - viewTop));
+    return { viewTop, viewBottom, maxScroll };
   }
 
   function selectScrollToShow(i, rosterLen) {
@@ -6426,17 +6492,26 @@
       });
       ctx.fillStyle = "#ffb347";
       ctx.font = "bold 14px Segoe UI,sans-serif";
-      ctx.fillText("Voter Coalition", 520, 270);
+      const rvLayout = resultsVoterListLayout(r.voters.length);
+      ctx.fillText("Voter Coalition" + (rvLayout.maxScroll ? " (scroll)" : ""), 520, 270);
       if (!r.voters.length) {
         ctx.fillStyle = "#888";
         ctx.fillText("No groups recruited", 520, 295);
       } else {
+        resultsVoterScroll = clamp(resultsVoterScroll, 0, rvLayout.maxScroll);
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(510, rvLayout.viewTop - rvLayout.rowH, 400, rvLayout.viewBottom - rvLayout.viewTop + rvLayout.rowH);
+        ctx.clip();
         r.voters.forEach((id, i) => {
           const g = VOTER_GROUPS.find((v) => v.id === id);
           if (!g) return;
+          const y = rvLayout.viewTop + i * rvLayout.rowH - resultsVoterScroll;
+          if (y < rvLayout.viewTop - rvLayout.rowH || y > rvLayout.viewBottom) return;
           ctx.fillStyle = g.color;
-          fitText(`${g.icon} ${g.name}  · loyalty ${r.loyalty[id] || 0}`, 520, 295 + i * 22, 360, "left");
+          fitText(`${g.icon} ${g.name}  · loyalty ${r.loyalty[id] || 0}`, 520, y, 360, "left");
         });
+        ctx.restore();
       }
     }
 
@@ -7043,6 +7118,18 @@
         const list = ACHIEVEMENT_DEFS.length ? ACHIEVEMENT_DEFS : [{ id: "first_voter" }];
         const layout = achievementListLayout(list.length);
         achievementScroll = clamp(achievementScroll + Math.sign(e.deltaY) * 34, 0, layout.maxScroll);
+        e.preventDefault();
+      } else if (showCodex) {
+        const layout = voterCodexListLayout(VOTER_GROUPS.length);
+        voterCodexScroll = clamp(voterCodexScroll + Math.sign(e.deltaY) * 26, 0, layout.maxScroll);
+        e.preventDefault();
+      } else if (state === "results" && results && !results.electionNight) {
+        const layout = resultsVoterListLayout((results.voters || []).length);
+        resultsVoterScroll = clamp(resultsVoterScroll + Math.sign(e.deltaY) * 22, 0, layout.maxScroll);
+        e.preventDefault();
+      } else if (showGlossary) {
+        const layout = glossaryListLayout(glossaryTab);
+        glossaryScroll = clamp(glossaryScroll + Math.sign(e.deltaY) * 30, 0, layout.maxScroll);
         e.preventDefault();
       }
     },
@@ -7656,6 +7743,19 @@
       },
       get achievementScroll() {
         return achievementScroll;
+      },
+      get voterCodexScroll() {
+        return voterCodexScroll;
+      },
+      get resultsVoterScroll() {
+        return resultsVoterScroll;
+      },
+      get glossaryScroll() {
+        return glossaryScroll;
+      },
+      openCodex() {
+        showCodex = true;
+        return showCodex;
       },
       openGallery(tab) {
         showGallery = true;
