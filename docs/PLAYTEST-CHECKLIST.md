@@ -98,11 +98,33 @@ asserts, headlessly:
 - the real decision → exit → legacy control flow reaches the Civic Legacy screen (L5)
 - loss keeps the save active as Opposition Organizer, and comeback restores office (L1, L3)
 
-**Still needs a human** — these are judgment/feel checks no headless harness can make:
-per-chapter music actually sounding distinct; dimmed/locked Reelection options
-reading clearly at real canvas sizes; Civic Legacy screen layout; whether the
-fieldwork cooldown feels spammy or too sparse; and every row in *Accessibility
-and soft-lock watch*.
+### Scripted browser pass (2026-07-28, closes the visual gap, still not the human sign-off)
+
+A real Chrome tab against the dev server, driven by dispatched
+`KeyboardEvent`/`MouseEvent`/`WheelEvent`s at the actual canvas and verified
+with genuine screenshots (`canvas.toBlob()`), not `OD.qa.*` shortcuts. Full
+7-chapter career played twice (Incumbent finish, Opposition Comeback finish).
+This is **not** the human pass — one browser, one fixed 960×540 window, no
+audio heard — but it closes some of what headless coverage above couldn't:
+
+- confirmed visually: all 4 season palettes distinct, every chapter intro/
+  decision/exit screen, the dimmed/locked Reelection option with its reason
+  text, keyboard cycling correctly skipping it, and the Civic Legacy screen
+  for both routes with correct copy and no card overflow
+- **found and fixed a real bug this way that no automated check caught**:
+  the real keyboard handler for chapter decisions used raw modulo cycling
+  instead of the gated `stepChapterChoice`, so ArrowDown/W/S could select a
+  locked option (confirming it stayed safe, since `advanceCampaignChapter`
+  blocks resolving one regardless). See `.agents/playtest-log.md` 2026-07-28.
+- a balance-only observation: Festival's fieldwork threshold (4) is easy to
+  under-shoot if a player doesn't realize its zones are revisitable —
+  legitimately failed the chapter in one run. Not a bug, worth a human read.
+
+**Still needs an actual human** — feel/judgment calls no amount of scripting
+resolves: whether per-chapter music actually *sounds* distinct; touch/mobile
+layout and window sizes other than 960×540; whether the fieldwork cooldown
+feels spammy or too sparse in practice; and every row in *Accessibility and
+soft-lock watch*.
 
 Only `orange-director` marks the phase **GO**. Log the human result in
 `.agents/playtest-log.md`.
