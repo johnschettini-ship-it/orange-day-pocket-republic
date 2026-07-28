@@ -453,6 +453,12 @@
         const r = distRoots[currentDistrict] || 131;
         pad.frequency.setTargetAtTime(r, ac.currentTime, 0.25);
         if (padGain) padGain.gain.setTargetAtTime(0.32, ac.currentTime, 0.2);
+      } else if (want === "campaign" && pad) {
+        // musicTheme stays "campaign" across chapter boundaries (state never
+        // leaves "chapter"), so a chapter's own root only changes here, not
+        // via startMusic(); glide the sustained pad rather than leaving it
+        // stuck on the previous chapter's note.
+        pad.frequency.setTargetAtTime(campaignMusicParams().root, ac.currentTime, 0.25);
       }
     } catch (_) {}
   }
@@ -3788,7 +3794,10 @@
     chapterChoice = 0;
     chapterFieldworkCooldown = 0;
     state = "chapter";
-    stopMusic();
+    // Crossfade into the campaign theme (syncMusic -> startMusic) instead of
+    // hard-stopping; a stop here just gets undone next frame by update()'s
+    // unconditional syncMusic() call, leaving an audible silent gap.
+    syncMusic();
   }
 
   function chapterControl(action) {
@@ -6864,7 +6873,7 @@
         e.preventDefault();
       } else if (state === "legacy") {
         state = "title";
-        stopMusic();
+        syncMusic();
         e.preventDefault();
       } else if (state === "play" && e.key === " ") {
         interact();
@@ -7091,7 +7100,7 @@
     }
     if (state === "legacy") {
       state = "title";
-      stopMusic();
+      syncMusic();
       return true;
     }
     return false;
