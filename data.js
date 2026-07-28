@@ -1277,6 +1277,62 @@ const CAMPAIGN_CHAPTERS = [
   },
 ];
 
+// Repeatable chapter fieldwork — resolved at designated zones while a
+// chapter's unique-mechanic zones are visited (see CHAPTER_FIELDWORK_ZONES
+// in game.js). Each entry's `testBloc` is the loyalty id that biases the
+// success roll; `loyalty`/`fail` are the deltas applied on each outcome.
+// Championship is keyed by eventBySeason value; the rest are flat pools.
+const CHAPTER_FIELDWORK = {
+  festival: [
+    { id: "float-stall", text: "A float stalls out mid-route and traffic backs up.", testBloc: "street", loyalty: { street: 3 }, fail: { street: -2 } },
+    { id: "vendor-dispute", text: "Two food vendors argue over the same corner.", testBloc: "business", loyalty: { business: 3 }, fail: { business: -2 } },
+    { id: "kid-separated", text: "A kid gets briefly separated from their group near the floats.", testBloc: "families", loyalty: { families: 4 }, fail: { families: -3 } },
+    { id: "crowd-surge", text: "A crowd surge presses toward the barricades.", testBloc: "fans", loyalty: { fans: 3 }, fail: { fans: -2, heat: 1 } },
+  ],
+  championship: {
+    "ice-cup": [
+      { id: "zamboni-jam", text: "The zamboni jams mid-resurface and the crowd is already restless.", testBloc: "fans", loyalty: { fans: 4 }, fail: { fans: -3, heat: 2 } },
+      { id: "scalper-scuffle", text: "Scalpers are working the entry line and a family got shorted.", testBloc: "families", loyalty: { families: 3, fans: 1 }, fail: { families: -3 } },
+      { id: "mascot-injury", text: "The rink mascot takes a header into the boards.", testBloc: "fans", loyalty: { fans: 3 }, fail: { fans: -2, heat: 1 } },
+    ],
+    baseball: [
+      { id: "tarp-crew", text: "A pop-up shower threatens the tarp crew's timing.", testBloc: "business", loyalty: { business: 3, fans: 1 }, fail: { fans: -3 } },
+      { id: "foul-ball-kid", text: "A foul ball clips a kid in the cheap seats.", testBloc: "families", loyalty: { families: 4 }, fail: { families: -4, heat: 2 } },
+      { id: "sponsor-spat", text: "Two sponsors argue over outfield ad space mid-game.", testBloc: "donors", loyalty: { donors: 3 }, fail: { donors: -2, heat: 1 } },
+    ],
+    "summer-games-bid": [
+      { id: "venue-inspection", text: "Bid inspectors show up a day early to check the venue.", testBloc: "policy", loyalty: { policy: 4 }, fail: { policy: -3 } },
+      { id: "bid-protest", text: "A protest forms outside the bid announcement, citing housing costs.", testBloc: "street", loyalty: { street: 3 }, fail: { street: -3, heat: 2 } },
+      { id: "media-stunt", text: "A rival stages a stunt for the visiting bid committee's cameras.", testBloc: "donors", loyalty: { donors: 3 }, fail: { donors: -2, heat: 2 } },
+    ],
+    football: [
+      { id: "parking-gridlock", text: "Stadium parking locks up an hour before kickoff.", testBloc: "business", loyalty: { business: 3 }, fail: { business: -3, heat: 1 } },
+      { id: "band-formation", text: "The marching band's halftime formation collides with a sponsor banner drop.", testBloc: "fans", loyalty: { fans: 3 }, fail: { fans: -2 } },
+      { id: "weather-delay", text: "Lightning in the distance forces a delay call.", testBloc: "families", loyalty: { families: 3 }, fail: { families: -2, heat: 1 } },
+    ],
+  },
+  storm: [
+    { id: "attic-search", text: "An elderly resident won't leave without her cat.", testBloc: "families", loyalty: { families: 4 }, fail: { families: -4 } },
+    { id: "flooded-basement", text: "A flooded basement blocks the fastest route out.", testBloc: "policy", loyalty: { policy: 3 }, fail: { policy: -2 } },
+    { id: "downed-line", text: "A downed line forces a detour around the block.", testBloc: "business", loyalty: { business: 3 }, fail: { business: -2 } },
+    { id: "shelter-crowd", text: "The shelter is over capacity and turning families away.", testBloc: "families", loyalty: { families: 4 }, fail: { families: -3, heat: 1 } },
+    { id: "volunteer-mixup", text: "Two volunteer crews show up for the same block.", testBloc: "street", loyalty: { street: 3 }, fail: { street: -2 } },
+  ],
+  recovery: [
+    { id: "contractor-lowball", text: "A contractor undercuts the repair estimate suspiciously.", testBloc: "budget", loyalty: { budget: 3 }, fail: { budget: -2 } },
+    { id: "supply-mixup", text: "A supply truck drops lumber at the wrong block.", testBloc: "business", loyalty: { business: 3 }, fail: { business: -2 } },
+    { id: "volunteer-fatigue", text: "Volunteers are running thin by afternoon.", testBloc: "street", loyalty: { street: 3 }, fail: { street: -2 } },
+    { id: "insurance-delay", text: "An insurance adjuster stalls a family's claim.", testBloc: "families", loyalty: { families: 4 }, fail: { families: -3 } },
+    { id: "donor-strings", text: "A donor offers supplies with a naming-rights string attached.", testBloc: "donors", loyalty: { donors: 3, budget: -1 }, fail: { donors: -2 } },
+  ],
+  budget: [
+    { id: "parks-delegation", text: "The Park Row delegation wants storm damage repaired before ribbon-cuttings.", testBloc: "families", loyalty: { families: 3 }, fail: { families: -3 } },
+    { id: "merchants-delegation", text: "Main Street merchants want a tax deferral after the parade disruptions.", testBloc: "business", loyalty: { business: 3 }, fail: { business: -3 } },
+    { id: "transit-delegation", text: "Commuters want the shuttle line cut during Championship Season restored.", testBloc: "street", loyalty: { street: 3 }, fail: { street: -3 } },
+    { id: "donor-delegation", text: "Donor Heights wants naming rights for their storm-recovery gift.", testBloc: "donors", loyalty: { donors: 3 }, fail: { donors: -2, heat: 1 } },
+  ],
+};
+
 global.ORANGE_DATA = {
   CHARACTERS,
   VOTER_GROUPS,
@@ -1300,5 +1356,6 @@ global.ORANGE_DATA = {
   BUTTON_SPOTS,
   CAMPAIGN_SEASONS,
   CAMPAIGN_CHAPTERS,
+  CHAPTER_FIELDWORK,
 };
 })(typeof window !== "undefined" ? window : globalThis);

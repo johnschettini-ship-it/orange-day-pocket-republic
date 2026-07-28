@@ -292,6 +292,28 @@
   }
 
   /** Theme master gain targets (before musicVol). */
+  // Distinct per-chapter/season procedural identity — keyed by the `music`
+  // strings already authored on CAMPAIGN_CHAPTERS/CAMPAIGN_SEASONS in
+  // data.js. Drives the campaign-phase theme (intro/decision/exit) and
+  // lightly colors the "play" theme's pace/peak while exploring a chapter.
+  const SEASON_PITCH = { winter: 0.84, spring: 1.06, summer: 1.18, fall: 0.94 };
+  const CAMPAIGN_MUSIC_PARAMS = {
+    campaign_plaza: { pace: 0.22, type: "triangle", scale: [262, 294, 330, 392, 440, 494], pattern: [0, 2, 4, 2, 3, 4, 5, 4], peak: 0.1, root: 131 },
+    festival_route: { pace: 0.15, type: "triangle", scale: [294, 330, 370, 415, 440, 494, 554], pattern: [0, 2, 3, 5, 4, 2, 6, 4], peak: 0.12, root: 147 },
+    stadium_night: { pace: 0.13, type: "square", scale: [220, 247, 277, 330, 370, 415], pattern: [0, 2, 4, 2, 5, 3, 4, 0], peak: 0.11, root: 110 },
+    emergency_pulse: { pace: 0.11, type: "square", scale: [220, 233, 247, 262], pattern: [0, 1, 0, 2, 0, 1, 0, 3], peak: 0.13, root: 110, pulse: true },
+    recovery_theme: { pace: 0.34, type: "sine", scale: [220, 247, 262, 294, 330], pattern: [0, 2, 3, 2, 4, 3, 2, 0], peak: 0.08, root: 110 },
+    budget_clock: { pace: 0.5, type: "triangle", scale: [262, 294, 330], pattern: [0, 1, 2, 1], peak: 0.07, root: 131, tickClock: true },
+    legacy_finale: { pace: 0.18, type: "triangle", scale: [262, 330, 392, 440, 523, 659], pattern: [0, 2, 4, 5, 4, 2, 3, 5, 4, 2, 0, 0], peak: 0.13, root: 165 },
+    winter_bells: { pace: 0.3, type: "sine", scale: [392, 440, 494, 523, 587], pattern: [0, 2, 4, 2, 3, 0], peak: 0.09, root: 196 },
+    spring_stroll: { pace: 0.2, type: "triangle", scale: [294, 330, 349, 392, 440, 494], pattern: [0, 2, 3, 4, 2, 1, 3, 0], peak: 0.1, root: 147 },
+    summer_brass: { pace: 0.16, type: "square", scale: [261, 293, 329, 349, 392, 440], pattern: [0, 2, 4, 3, 2, 5, 4, 0], peak: 0.12, root: 131 },
+    fall_march: { pace: 0.24, type: "triangle", scale: [220, 246, 261, 293, 329], pattern: [0, 1, 2, 1, 3, 2, 4, 0], peak: 0.1, root: 110 },
+  };
+  function campaignMusicParams() {
+    return CAMPAIGN_MUSIC_PARAMS[campaignMusicKey()] || CAMPAIGN_MUSIC_PARAMS.campaign_plaza;
+  }
+
   function themeMasterLevel(theme) {
     const base = {
       intro: 0.22,
@@ -300,6 +322,7 @@
       play: 0.24,
       evening: 0.2,
       results: 0.27,
+      campaign: 0.23,
     };
     let lv = (base[theme] || 0.045) * musicVol;
     if (state === "pause" && theme === "play") lv *= 0.45; // duck under pause menu
@@ -311,7 +334,7 @@
     if (state === "intro") return "intro";
     if (state === "title") return "title";
     if (state === "select") return "select";
-    if (state === "chapter") return chapterPhase === "decision" ? "evening" : "select";
+    if (state === "chapter" || state === "legacy") return campaign ? "campaign" : "select";
     if (state === "evening") return "evening";
     if (state === "results") return "results";
     if (state === "play" || state === "pause") return "play";
@@ -360,7 +383,7 @@
         evening: 110,
         results: 147,
       };
-      pad.frequency.value = roots[want] || 131;
+      pad.frequency.value = want === "campaign" ? campaignMusicParams().root : roots[want] || 131;
       padGain.gain.value = 0.0001;
       pad.connect(padGain);
       padGain.connect(master);
@@ -446,6 +469,11 @@
         results: { pace: 0.22, scale: [262, 330, 392, 440, 523, 659], pattern: [0, 2, 4, 5, 4, 2, 3, 5, 4, 2, 0, 0], type: "triangle", peak: 0.11, len: 0.18 },
       };
       let spec = specs[theme];
+      if (theme === "campaign") {
+        const p = campaignMusicParams();
+        const seasonMult = SEASON_PITCH[(campaign && campaign.season) || ""] || 1;
+        spec = { pace: p.pace, scale: p.scale.map((n) => n * seasonMult), pattern: p.pattern, type: p.type, peak: p.peak, len: p.len || 0.18 };
+      }
       if (theme === "play") {
         const distPace =
           currentDistrict === "media" ? 0.15 : currentDistrict === "donor" ? 0.17 : currentDistrict === "campus" ? 0.19 : 0.22;
@@ -462,7 +490,7 @@
           donor: [0, 4, 2, 5, 3, 4, 1, 0],
         };
         const d = currentDistrict || "plaza";
-        const seasonShift = { winter: 0.84, spring: 1.06, summer: 1.18, fall: 0.94 }[(campaign && campaign.season) || ""] || 1;
+        const seasonShift = SEASON_PITCH[(campaign && campaign.season) || ""] || 1;
         const chapterShift = 1 + (((campaign && campaign.chapter) || 0) % 4) * 0.025;
         spec = {
           pace: distPace,
@@ -472,6 +500,18 @@
           peak: 0.1 * (d === "plaza" ? 1 : 1.12),
           len: 0.16,
         };
+        // Layer the active chapter's mood onto exploration pacing/intensity
+        // without losing the district identity above (e.g. Storm Emergency
+        // feels urgent, Budget Reckoning feels measured).
+        if (campaign) {
+          const mood = campaignMusicParams();
+          if (mood.pulse) {
+            spec.pace *= 0.7;
+            spec.peak = Math.min(0.16, spec.peak * 1.15);
+          } else if (mood.tickClock) {
+            spec.pace *= 1.4;
+          }
+        }
       }
       if (!spec) return;
       musicAcc += dt;
@@ -545,6 +585,7 @@
   const BUTTON_SPOTS = _D.BUTTON_SPOTS;
   const CAMPAIGN_SEASONS = _D.CAMPAIGN_SEASONS || {};
   const CAMPAIGN_CHAPTERS = _D.CAMPAIGN_CHAPTERS || [];
+  const CHAPTER_FIELDWORK = _D.CHAPTER_FIELDWORK || {};
   if (!CHARACTERS || !ZONES) {
     console.error("ORANGE_DATA missing — load data.js before game.js");
   }
@@ -558,6 +599,7 @@
   const INTRO_DUR = 5.5; // auto-advance to title
   let charIdx = 0;
   let selectScroll = 0; // vertical scroll offset for the character-select grid
+  let milestoneScroll = 0; // vertical scroll offset for the Boards milestones list
   let selected = null;
   let player = null;
   let cam = { x: 0, y: 0 };
@@ -651,11 +693,25 @@
   let seedFlags = {};
   let titleFocus = "new"; // new | continue
   let campaign = null;
+  let legacySummary = null;
   let chapterPhase = "intro"; // intro | decision | exit
   let chapterDecisionIndex = 0;
   let chapterChoice = 0;
   let chapterMission = null;
+  let chapterFieldworkCooldown = 0;
   const chapterPad = { up: false, down: false, confirm: false };
+
+  // Zones where each chapter's repeatable unique mechanic resolves (see
+  // resolveChapterFieldwork). A subset of that chapter's CHAPTER_MISSIONS
+  // zone-walk steps, so the same zone visits that advance the walk also
+  // carry the chapter's distinct gameplay once the walk step is done.
+  const CHAPTER_FIELDWORK_ZONES = {
+    festival: ["stage", "park"],
+    championship: ["stage", "booth"],
+    storm: ["park", "home"],
+    recovery: ["park", "crate"],
+    budget: ["board", "mayor"],
+  };
 
   const CHAPTER_MISSIONS = {
     election: { label: "Recover the permit and face the civic stage", steps: ["mailbox", "mayor", "stage"], readiness: 0 },
@@ -696,6 +752,7 @@
       promises: {},
       districts: {},
       decisions: [],
+      metrics: {},
       weeks: 0,
       electionWins: 0,
       electionLosses: 0,
@@ -738,6 +795,8 @@
       rescues: campaign.rescues,
       eventHistory: campaign.decisions.slice(),
       mission: chapterMissionView(),
+      metrics: { ...(campaign.metrics || {}) },
+      legacy: campaign.complete ? legacySummary || buildLegacySummary() : null,
     };
   }
 
@@ -793,14 +852,38 @@
   function finalizeChapterMission() {
     if (!chapterMission) return null;
     if (chapterMission.success != null) return chapterMissionView();
+    const chapter = campaignChapter();
+    const missionSpec = chapter && chapter.mission;
     const preparation = (campaign ? campaign.readiness : 0) + Math.floor((campaign ? campaign.infrastructure : 0) / 6);
     const onTime = chapterMission.finishedDay != null && chapterMission.finishedDay <= campaignMaxDays();
-    chapterMission.success = chapterMission.completed && onTime && preparation >= chapterMission.readiness;
+    // Metric gate only applies once a chapter's unique mechanic has actually
+    // started bumping its metric via bumpCampaignMetric() -- chapters that
+    // never touch it (still using only the generic zone-walk) behave exactly
+    // as before, so this can't regress chapters that haven't been wired yet.
+    const metricGoal = missionSpec && missionSpec.metric ? missionSpec.threshold || 0 : 0;
+    const metricTouched = !!(missionSpec && missionSpec.metric && campaign && campaign.metrics &&
+      Object.prototype.hasOwnProperty.call(campaign.metrics, missionSpec.metric));
+    const metricProgress = metricTouched ? campaign.metrics[missionSpec.metric] : 0;
+    const metricMet = !metricGoal || !metricTouched || metricProgress >= metricGoal;
+    chapterMission.success = chapterMission.completed && onTime && preparation >= chapterMission.readiness && metricMet;
     chapterMission.failed = !chapterMission.success;
     if (campaign) {
-      adjustCampaignLoyalty("families", chapterMission.success ? 4 : -5);
-      adjustCampaignLoyalty("policy", chapterMission.success ? 3 : -4);
-      if (chapterMission.success) campaign.infrastructure += 1;
+      const reward = chapterMission.success && missionSpec && missionSpec.reward;
+      if (reward) {
+        Object.entries(reward).forEach(([key, amount]) => {
+          if (key === "loyalty") adjustCampaignLoyalty("families", amount);
+          else if (key === "coins") addCoins(amount, "chapter mission");
+          else if (key === "infrastructure") campaign.infrastructure += amount;
+          else if (key === "readiness") campaign.readiness += amount;
+          else if (key === "legacy") campaign.legacy = (campaign.legacy || 0) + amount;
+          else adjustCampaignLoyalty(key, amount);
+        });
+        adjustCampaignLoyalty("policy", 3);
+      } else {
+        adjustCampaignLoyalty("families", chapterMission.success ? 4 : -5);
+        adjustCampaignLoyalty("policy", chapterMission.success ? 3 : -4);
+        if (chapterMission.success) campaign.infrastructure += 1;
+      }
     }
     return chapterMissionView();
   }
@@ -2134,6 +2217,7 @@
       return false;
     }
     voters.push(groupId);
+    if (campaign) bumpCampaignMetric("recruitedBlocs", 1);
     codexSeen[groupId] = true;
     voterFavor[groupId] = need;
     voterLoyalty[groupId] = 55 + Math.floor(Math.random() * 20);
@@ -2298,6 +2382,8 @@
     if (hit.type === "zone") {
       useZone(hit.ref);
       progressChapterMission(hit.ref.id);
+      const chapter = campaignChapter();
+      if (chapter) resolveChapterFieldwork(chapter.id, hit.ref.id);
     }
   }
 
@@ -3512,6 +3598,133 @@
     return campaign.loyalty[id];
   }
 
+  function bumpCampaignMetric(id, n = 1) {
+    if (!campaign) campaign = newCampaign();
+    if (!campaign.metrics) campaign.metrics = {};
+    campaign.metrics[id] = (campaign.metrics[id] || 0) + n;
+    return campaign.metrics[id];
+  }
+
+  // A decision option's `requires` gates it on the player's actual civic
+  // record rather than being cosmetic text. If every option on a decision
+  // would fail its requirement, the gate lifts for that decision so the
+  // player is never soft-locked out of advancing the career.
+  function decisionRequirementMet(requires) {
+    if (!requires || !campaign) return true;
+    if (requires === "fulfilled-promises") return Object.values(campaign.promises || {}).some((v) => v === "kept");
+    if (requires === "infrastructure") return (campaign.infrastructure || 0) >= 5;
+    if (requires === "coalition") {
+      const ids = ["donors", "fans", "business"];
+      const avg = ids.reduce((sum, id) => sum + (campaign.loyalty[id] == null ? 50 : campaign.loyalty[id]), 0) / ids.length;
+      return avg >= 55;
+    }
+    return true;
+  }
+
+  function decisionOptionAvailable(option, decision) {
+    if (!option || !option.requires) return true;
+    if (decision && !decision.options.some((o) => decisionRequirementMet(o.requires))) return true;
+    return decisionRequirementMet(option.requires);
+  }
+
+  function requirementLabel(requires) {
+    if (requires === "fulfilled-promises") return "keep a promise first";
+    if (requires === "infrastructure") return "build up more infrastructure first";
+    if (requires === "coalition") return "grow your coalition's loyalty first";
+    return "not available yet";
+  }
+
+  function stepChapterChoice(decision, current, dir) {
+    const n = decision.options.length;
+    let next = current;
+    for (let i = 0; i < n; i++) {
+      next = (next + dir + n) % n;
+      if (decisionOptionAvailable(decision.options[next], decision)) return next;
+    }
+    return current;
+  }
+
+  // Championship/Storm/Recovery/Budget's unique per-chapter mechanic:
+  // revisiting the chapter's designated zones (CHAPTER_FIELDWORK_ZONES)
+  // resolves a themed problem via a weighted roll (same shape as
+  // runPlazaDebate), biased by the loyalty of the bloc it tests, and
+  // advances the chapter's authored mission metric toward its threshold.
+  function resolveChapterFieldwork(chapterId, zoneId) {
+    if (!campaign || chapterFieldworkCooldown > 0) return false;
+    const zones = CHAPTER_FIELDWORK_ZONES[chapterId];
+    if (!zones || !zones.includes(zoneId)) return false;
+    const chapter = campaignChapter();
+    if (!chapter || chapter.id !== chapterId) return false;
+    const metric = chapter.mission && chapter.mission.metric;
+    const threshold = (chapter.mission && chapter.mission.threshold) || 0;
+    if (metric && threshold && (campaign.metrics[metric] || 0) >= threshold) return false;
+    let pool = CHAPTER_FIELDWORK[chapterId];
+    if (chapterId === "championship") {
+      const seasonEvent = chapter.eventBySeason && chapter.eventBySeason[campaign.season];
+      pool = pool && pool[seasonEvent];
+    }
+    if (!pool || !pool.length) return false;
+    const entry = pool[Math.floor(Math.random() * pool.length)];
+    const blocLoyalty = entry.testBloc ? (campaign.loyalty[entry.testBloc] == null ? 50 : campaign.loyalty[entry.testBloc]) : 50;
+    const bonus = (blocLoyalty - 50) / 150;
+    const score = clamp(0.42 + bonus + (campaign.infrastructure || 0) * 0.01 + Math.random() * 0.18, 0, 1);
+    const success = score >= 0.55;
+    chapterFieldworkCooldown = 5.5;
+    if (metric) bumpCampaignMetric(metric, 1);
+    Object.entries((success ? entry.loyalty : entry.fail) || {}).forEach(([id, amount]) => {
+      if (id === "heat") addAxes({ heat: amount });
+      else adjustCampaignLoyalty(id, amount);
+    });
+    toast(`${entry.text} ${success ? "— handled." : "— it slips through."}`, 4.2);
+    pushLog(`${chapter.name} fieldwork: ${entry.id} (${success ? "success" : "setback"}).`);
+    sfx(success ? "ok" : "warn");
+    saveGame();
+    return true;
+  }
+
+  // Reelection's "Closing Argument" — reuses runPlazaDebate's weighted-roll
+  // shape (prep factors + small RNG vs. a threshold) so the campaign's
+  // actual record (kept promises, infrastructure, coalition loyalty)
+  // decides the outcome instead of the generic zone-walk mission.
+  function runClosingArgument() {
+    if (!campaign) return { success: false, loyalBlocs: 0, score: 0 };
+    const loyalBlocs = Object.values(campaign.loyalty).filter((v) => v >= 50).length;
+    bumpCampaignMetric("loyalBlocs", loyalBlocs);
+    const keptPromises = Object.values(campaign.promises || {}).filter((v) => v === "kept").length;
+    const coalitionIds = ["donors", "fans", "business"];
+    const coalitionAvg = coalitionIds.reduce((sum, id) => sum + (campaign.loyalty[id] == null ? 50 : campaign.loyalty[id]), 0) / coalitionIds.length;
+    const score = clamp(0.3 + keptPromises * 0.06 + (campaign.infrastructure || 0) * 0.01 + (coalitionAvg - 50) / 150 + Math.random() * 0.18, 0, 1);
+    const success = score >= 0.55;
+    pushLog(`Closing Argument: ${loyalBlocs} loyal blocs, ${keptPromises} kept promises (${success ? "won the room" : "fell short"}).`);
+    toast(success ? "Closing Argument lands — the record speaks for itself." : "Closing Argument stumbles — the record wasn't enough.", 4.5);
+    sfx(success ? "fanfare" : "warn");
+    return { success, loyalBlocs, score };
+  }
+
+  // Summarizes a completed 7-chapter career for the Civic Legacy screen —
+  // office-vs-comeback route, final civic record, and the coalition that
+  // ended up strongest, rather than a single week's vote total.
+  function buildLegacySummary() {
+    if (!campaign) return null;
+    const loyaltyVals = Object.values(campaign.loyalty);
+    const avgLoyalty = loyaltyVals.length ? Math.round(loyaltyVals.reduce((a, b) => a + b, 0) / loyaltyVals.length) : 50;
+    const kept = Object.values(campaign.promises || {}).filter((v) => v === "kept").length;
+    const broken = Object.values(campaign.promises || {}).filter((v) => v === "broken").length;
+    const coalitionIds = ["donors", "fans", "business", "street", "families"];
+    const dominant = coalitionIds.reduce((best, id) => ((campaign.loyalty[id] || 50) > (campaign.loyalty[best] || 50) ? id : best), coalitionIds[0]);
+    return {
+      route: campaign.inOffice ? "Incumbent" : "Opposition Comeback",
+      avgLoyalty,
+      infrastructure: campaign.infrastructure,
+      kept,
+      broken,
+      wins: campaign.electionWins,
+      losses: campaign.electionLosses,
+      dominant,
+      season: campaign.season,
+    };
+  }
+
   function resolveCampaignEvent(eventId, choiceIndex = 0, success = true) {
     const chapter = campaignChapter();
     const decision = chapter && (chapter.decisions || []).find((d) => d.id === eventId);
@@ -3569,6 +3782,7 @@
     chapterPhase = "intro";
     chapterDecisionIndex = 0;
     chapterChoice = 0;
+    chapterFieldworkCooldown = 0;
     state = "chapter";
     stopMusic();
   }
@@ -3578,8 +3792,8 @@
     const chapter = campaignChapter();
     const decision = chapter && (chapter.decisions || [])[chapterDecisionIndex];
     const n = decision ? decision.options.length : 0;
-    if (chapterPhase === "decision" && n && action === "up") chapterChoice = (chapterChoice + n - 1) % n;
-    else if (chapterPhase === "decision" && n && action === "down") chapterChoice = (chapterChoice + 1) % n;
+    if (chapterPhase === "decision" && n && action === "up") chapterChoice = stepChapterChoice(decision, chapterChoice, -1);
+    else if (chapterPhase === "decision" && n && action === "down") chapterChoice = stepChapterChoice(decision, chapterChoice, 1);
     else if (action === "confirm") advanceCampaignChapter();
     return { phase: chapterPhase, choice: chapterChoice, decisionIndex: chapterDecisionIndex, state };
   }
@@ -3611,7 +3825,14 @@
     const chapter = campaignChapter();
     const decisions = (chapter && chapter.decisions) || [];
     if (chapterPhase === "decision" && chapterDecisionIndex < decisions.length) {
-      const missionResult = chapterMission && chapterMission.success;
+      const decision = decisions[chapterDecisionIndex];
+      const chosen = decision.options[chapterChoice];
+      if (!decisionOptionAvailable(chosen, decision)) {
+        toast(`Not yet — ${requirementLabel(chosen.requires)}.`);
+        return false;
+      }
+      let missionResult = chapterMission && chapterMission.success;
+      if (chapter.id === "reelection") missionResult = runClosingArgument().success;
       resolveCampaignEvent(decisions[chapterDecisionIndex].id, chapterChoice, missionResult !== false);
       chapterDecisionIndex += 1;
       chapterChoice = 0;
@@ -3622,8 +3843,10 @@
     if (chapterPhase === "exit") {
       if (campaign.chapter >= CAMPAIGN_CHAPTERS.length - 1) {
         campaign.complete = true;
+        legacySummary = buildLegacySummary();
         saveGame();
-        state = "title";
+        state = "legacy";
+        syncMusic();
         return true;
       }
       campaign.chapter += 1;
@@ -3886,6 +4109,7 @@
       addAxes({ heat: 1 });
       if (Math.random() < 0.3) toast("Chaos Ticket: a rumor goes viral for no reason.");
     }
+    chapterFieldworkCooldown = Math.max(0, chapterFieldworkCooldown - dt);
     maybeMicroEvent();
     pumpTips(dt);
 
@@ -5301,20 +5525,23 @@
       ctx.fillText(decision ? decision.prompt : "The city waits for a decision.", W / 2, 205);
       (decision ? decision.options : []).forEach((option, i) => {
         const y = 245 + i * 58;
-        ctx.fillStyle = i === chapterChoice ? "rgba(255,154,60,0.3)" : "rgba(255,255,255,0.06)";
+        const available = decisionOptionAvailable(option, decision);
+        ctx.fillStyle = !available ? "rgba(255,255,255,0.02)" : i === chapterChoice ? "rgba(255,154,60,0.3)" : "rgba(255,255,255,0.06)";
         drawRounded(170, y, W - 340, 44, 9);
         ctx.fill();
-        ctx.strokeStyle = i === chapterChoice ? "#ffb347" : "#554566";
+        ctx.strokeStyle = !available ? "#3a3048" : i === chapterChoice ? "#ffb347" : "#554566";
         ctx.stroke();
-        ctx.fillStyle = i === chapterChoice ? "#fff" : "#c8b8d8";
-        ctx.font = font(13, i === chapterChoice ? "bold" : "");
+        ctx.fillStyle = !available ? "#665a78" : i === chapterChoice ? "#fff" : "#c8b8d8";
+        ctx.font = font(13, i === chapterChoice && available ? "bold" : "");
         ctx.fillText(option.text, W / 2, y + 17);
-        const effects = Object.entries(option.loyalty || {})
-          .map(([id, delta]) => `${id} ${delta >= 0 ? "+" : ""}${delta}`)
-          .concat(option.infrastructure ? [`infrastructure +${option.infrastructure}`] : [])
-          .concat(option.readiness ? [`readiness +${option.readiness}`] : [])
-          .join(" · ");
-        ctx.fillStyle = i === chapterChoice ? "#ffd8a0" : "#8f80a8";
+        const effects = !available
+          ? `Locked — ${requirementLabel(option.requires)}`
+          : Object.entries(option.loyalty || {})
+              .map(([id, delta]) => `${id} ${delta >= 0 ? "+" : ""}${delta}`)
+              .concat(option.infrastructure ? [`infrastructure +${option.infrastructure}`] : [])
+              .concat(option.readiness ? [`readiness +${option.readiness}`] : [])
+              .join(" · ");
+        ctx.fillStyle = !available ? "#8f7098" : i === chapterChoice ? "#ffd8a0" : "#8f80a8";
         ctx.font = font(10);
         fitText(effects || "Outcome depends on mission performance", W / 2, y + 35, W - 380, "center");
       });
@@ -5415,10 +5642,16 @@
         120
       );
       const visibleMs = MILESTONES.filter((ms) => !ms.secret || meta.milestones[ms.id] || (ms.unlocks || []).some((id) => meta.unlockedChars[id]));
+      const msLayout = milestoneListLayout(visibleMs.length);
+      milestoneScroll = clamp(milestoneScroll, 0, msLayout.maxScroll);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(W / 2 - 330, msLayout.viewTop - 18, 660, msLayout.viewBottom - msLayout.viewTop + 18);
+      ctx.clip();
       visibleMs.forEach((ms, i) => {
         const on = !!meta.milestones[ms.id] || !!ms.auto;
-        const y = 148 + i * 36;
-        if (y > 470) return;
+        const y = msLayout.viewTop + i * msLayout.rowH - milestoneScroll;
+        if (y < msLayout.viewTop - msLayout.rowH || y > msLayout.viewBottom) return;
         ctx.fillStyle = on ? "rgba(40,80,55,0.5)" : ms.secret ? "rgba(60,40,80,0.55)" : "rgba(40,30,50,0.55)";
         drawRounded(W / 2 - 330, y - 14, 660, 32, 8);
         ctx.fill();
@@ -5435,10 +5668,15 @@
           .join(", ");
         fitText(ms.desc + (unlockNames ? "  →  " + unlockNames : ""), W / 2 - 318, y + 16, 640, "left");
       });
+      ctx.restore();
       ctx.textAlign = "center";
       ctx.fillStyle = "#8878a8";
       ctx.font = font(11);
-      ctx.fillText("Tab / click tabs · Esc/G close · milestones unlock cast for new weeks", W / 2, 500);
+      ctx.fillText(
+        "Tab / click tabs · Esc/G close · milestones unlock cast for new weeks" + (msLayout.maxScroll ? " · scroll for more" : ""),
+        W / 2,
+        500
+      );
     } else {
       // Public store-ready board
       const list = ACHIEVEMENT_DEFS.length
@@ -5838,6 +6076,18 @@
       y: layout.viewTop + row * (layout.cardH + layout.gap) - selectScroll,
     };
   }
+  // Same scroll-offset idiom as selectLayout/selectScroll, applied to the
+  // Boards milestones list so it scrolls once entries overflow the panel
+  // instead of silently dropping rows past the viewport.
+  function milestoneListLayout(count) {
+    const rowH = 36;
+    const viewTop = 148,
+      viewBottom = 476;
+    const contentH = count * rowH;
+    const maxScroll = Math.max(0, contentH - (viewBottom - viewTop));
+    return { rowH, viewTop, viewBottom, maxScroll };
+  }
+
   function selectScrollToShow(i, rosterLen) {
     const layout = selectLayout(rosterLen);
     const row = Math.floor(i / layout.cols);
@@ -6181,6 +6431,70 @@
     ctx.fillText("I credits · O options · ★" + achN + " · " + BUILD_ID, W / 2, 532);
   }
 
+  function drawLegacy() {
+    const s = legacySummary || buildLegacySummary() || {};
+    ctx.fillStyle = "#140e24";
+    ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#ffb347";
+    ctx.font = "bold 26px Segoe UI,sans-serif";
+    ctx.fillText("Civic Legacy — Career Complete", W / 2, 60);
+    ctx.fillStyle = "#e8d8f0";
+    ctx.font = "15px Segoe UI,sans-serif";
+    wrapText(
+      s.route === "Incumbent"
+        ? "The city closes the book on a mayor who finished the record they ran on."
+        : "The city closes the book on an organizer who rebuilt a coalition from outside office.",
+      W / 2,
+      96,
+      680,
+      22,
+      2,
+      "center"
+    );
+
+    const cards = [
+      { label: "Final Route", val: s.route || "—", col: "#ff8c28" },
+      { label: "City Loyalty", val: `${s.avgLoyalty ?? 50}/100`, col: "#80e0a0" },
+      { label: "Infrastructure", val: String(s.infrastructure || 0), col: "#a0c8ff" },
+      { label: "Promises Kept / Broken", val: `${s.kept || 0} / ${s.broken || 0}`, col: "#ffd060" },
+      { label: "Elections Won / Lost", val: `${s.wins || 0} / ${s.losses || 0}`, col: "#c080ff" },
+      { label: "Strongest Coalition", val: s.dominant || "—", col: "#ff9a3c" },
+    ];
+    const cardW = 220;
+    const gap = 16;
+    const perRow = 3;
+    const total = perRow * cardW + (perRow - 1) * gap;
+    const startX = (W - total) / 2;
+    cards.forEach((c, i) => {
+      const row = Math.floor(i / perRow);
+      const col = i % perRow;
+      const x = startX + col * (cardW + gap);
+      const y = 150 + row * 96;
+      ctx.fillStyle = "rgba(40,30,60,0.9)";
+      drawRounded(x, y, cardW, 78, 10);
+      ctx.fill();
+      ctx.strokeStyle = "#554566";
+      ctx.stroke();
+      ctx.fillStyle = "#a090b8";
+      ctx.font = "11px Segoe UI,sans-serif";
+      ctx.fillText(c.label, x + cardW / 2, y + 22);
+      ctx.fillStyle = c.col;
+      ctx.font = "bold 15px Segoe UI,sans-serif";
+      fitText(String(c.val), x + cardW / 2, y + 52, cardW - 16, "center");
+    });
+
+    ctx.fillStyle = "rgba(255,140,40,0.9)";
+    drawRounded(W / 2 - 130, 400, 260, 44, 12);
+    ctx.fill();
+    ctx.fillStyle = "#1a1020";
+    ctx.font = "bold 16px Segoe UI,sans-serif";
+    ctx.fillText("Title Screen (Enter)", W / 2, 428);
+    ctx.fillStyle = "#6a5a88";
+    ctx.font = "11px Cascadia Mono,monospace";
+    ctx.fillText(BUILD_ID + " · fictional archetypes only", W / 2, 460);
+  }
+
   function frame(dt) {
     if (state === "intro") drawIntro(dt);
     else if (state === "title") drawTitle();
@@ -6188,6 +6502,7 @@
     else if (state === "chapter") drawChapter();
     else if (state === "evening") drawEvening();
     else if (state === "results") drawResults();
+    else if (state === "legacy") drawLegacy();
     else {
       drawWorld();
       drawSeasonWeather();
@@ -6449,6 +6764,10 @@
         chapterChoice = 0;
         state = "chapter";
         e.preventDefault();
+      } else if (state === "legacy") {
+        state = "title";
+        stopMusic();
+        e.preventDefault();
       } else if (state === "play" && e.key === " ") {
         interact();
         e.preventDefault();
@@ -6672,6 +6991,11 @@
       state = "chapter";
       return true;
     }
+    if (state === "legacy") {
+      state = "title";
+      stopMusic();
+      return true;
+    }
     return false;
   }
 
@@ -6681,11 +7005,17 @@
   canvas.addEventListener(
     "wheel",
     (e) => {
-      if (state !== "select") return;
-      const roster = selectRoster();
-      const layout = selectLayout(roster.length);
-      selectScroll = clamp(selectScroll + Math.sign(e.deltaY) * 60, 0, layout.maxScroll);
-      e.preventDefault();
+      if (state === "select") {
+        const roster = selectRoster();
+        const layout = selectLayout(roster.length);
+        selectScroll = clamp(selectScroll + Math.sign(e.deltaY) * 60, 0, layout.maxScroll);
+        e.preventDefault();
+      } else if (showGallery && galleryTab === "miles") {
+        const visibleMs = MILESTONES.filter((ms) => !ms.secret || meta.milestones[ms.id] || (ms.unlocks || []).some((id) => meta.unlockedChars[id]));
+        const layout = milestoneListLayout(visibleMs.length);
+        milestoneScroll = clamp(milestoneScroll + Math.sign(e.deltaY) * 36, 0, layout.maxScroll);
+        e.preventDefault();
+      }
     },
     { passive: false }
   );
@@ -7082,6 +7412,18 @@
       },
       resolveCampaignEvent,
       adjustLoyalty: adjustCampaignLoyalty,
+      resolveChapterFieldwork(chapterId, zoneId) {
+        chapterFieldworkCooldown = 0;
+        return resolveChapterFieldwork(chapterId, zoneId);
+      },
+      runClosingArgument,
+      get campaignMetrics() {
+        return { ...((campaign && campaign.metrics) || {}) };
+      },
+      decisionOptionAvailable,
+      get legacySummary() {
+        return legacySummary;
+      },
       get chapterMission() {
         return chapterMissionView();
       },
@@ -7106,6 +7448,10 @@
         if (phase) chapterPhase = phase;
         state = "chapter";
         return chapterControl(action);
+      },
+      setChapterProgress(decisionIndex = 0, choice = 0) {
+        chapterDecisionIndex = decisionIndex;
+        chapterChoice = choice;
       },
       loseElection() {
         campaign.inOffice = false;
@@ -7275,6 +7621,15 @@
       },
       get selectScroll() {
         return selectScroll;
+      },
+      get milestoneScroll() {
+        return milestoneScroll;
+      },
+      openGallery(tab) {
+        showGallery = true;
+        if (tab) galleryTab = tab;
+        drawGallery();
+        return showGallery;
       },
       get charIdx() {
         return charIdx;
