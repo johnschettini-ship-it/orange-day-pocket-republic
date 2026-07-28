@@ -599,6 +599,7 @@
   const INTRO_DUR = 5.5; // auto-advance to title
   let charIdx = 0;
   let selectScroll = 0; // vertical scroll offset for the character-select grid
+  let milestoneScroll = 0; // vertical scroll offset for the Boards milestones list
   let selected = null;
   let player = null;
   let cam = { x: 0, y: 0 };
@@ -5641,10 +5642,16 @@
         120
       );
       const visibleMs = MILESTONES.filter((ms) => !ms.secret || meta.milestones[ms.id] || (ms.unlocks || []).some((id) => meta.unlockedChars[id]));
+      const msLayout = milestoneListLayout(visibleMs.length);
+      milestoneScroll = clamp(milestoneScroll, 0, msLayout.maxScroll);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(W / 2 - 330, msLayout.viewTop - 18, 660, msLayout.viewBottom - msLayout.viewTop + 18);
+      ctx.clip();
       visibleMs.forEach((ms, i) => {
         const on = !!meta.milestones[ms.id] || !!ms.auto;
-        const y = 148 + i * 36;
-        if (y > 470) return;
+        const y = msLayout.viewTop + i * msLayout.rowH - milestoneScroll;
+        if (y < msLayout.viewTop - msLayout.rowH || y > msLayout.viewBottom) return;
         ctx.fillStyle = on ? "rgba(40,80,55,0.5)" : ms.secret ? "rgba(60,40,80,0.55)" : "rgba(40,30,50,0.55)";
         drawRounded(W / 2 - 330, y - 14, 660, 32, 8);
         ctx.fill();
@@ -5661,10 +5668,15 @@
           .join(", ");
         fitText(ms.desc + (unlockNames ? "  →  " + unlockNames : ""), W / 2 - 318, y + 16, 640, "left");
       });
+      ctx.restore();
       ctx.textAlign = "center";
       ctx.fillStyle = "#8878a8";
       ctx.font = font(11);
-      ctx.fillText("Tab / click tabs · Esc/G close · milestones unlock cast for new weeks", W / 2, 500);
+      ctx.fillText(
+        "Tab / click tabs · Esc/G close · milestones unlock cast for new weeks" + (msLayout.maxScroll ? " · scroll for more" : ""),
+        W / 2,
+        500
+      );
     } else {
       // Public store-ready board
       const list = ACHIEVEMENT_DEFS.length
@@ -6064,6 +6076,18 @@
       y: layout.viewTop + row * (layout.cardH + layout.gap) - selectScroll,
     };
   }
+  // Same scroll-offset idiom as selectLayout/selectScroll, applied to the
+  // Boards milestones list so it scrolls once entries overflow the panel
+  // instead of silently dropping rows past the viewport.
+  function milestoneListLayout(count) {
+    const rowH = 36;
+    const viewTop = 148,
+      viewBottom = 476;
+    const contentH = count * rowH;
+    const maxScroll = Math.max(0, contentH - (viewBottom - viewTop));
+    return { rowH, viewTop, viewBottom, maxScroll };
+  }
+
   function selectScrollToShow(i, rosterLen) {
     const layout = selectLayout(rosterLen);
     const row = Math.floor(i / layout.cols);
@@ -6981,11 +7005,17 @@
   canvas.addEventListener(
     "wheel",
     (e) => {
-      if (state !== "select") return;
-      const roster = selectRoster();
-      const layout = selectLayout(roster.length);
-      selectScroll = clamp(selectScroll + Math.sign(e.deltaY) * 60, 0, layout.maxScroll);
-      e.preventDefault();
+      if (state === "select") {
+        const roster = selectRoster();
+        const layout = selectLayout(roster.length);
+        selectScroll = clamp(selectScroll + Math.sign(e.deltaY) * 60, 0, layout.maxScroll);
+        e.preventDefault();
+      } else if (showGallery && galleryTab === "miles") {
+        const visibleMs = MILESTONES.filter((ms) => !ms.secret || meta.milestones[ms.id] || (ms.unlocks || []).some((id) => meta.unlockedChars[id]));
+        const layout = milestoneListLayout(visibleMs.length);
+        milestoneScroll = clamp(milestoneScroll + Math.sign(e.deltaY) * 36, 0, layout.maxScroll);
+        e.preventDefault();
+      }
     },
     { passive: false }
   );
@@ -7591,6 +7621,15 @@
       },
       get selectScroll() {
         return selectScroll;
+      },
+      get milestoneScroll() {
+        return milestoneScroll;
+      },
+      openGallery(tab) {
+        showGallery = true;
+        if (tab) galleryTab = tab;
+        drawGallery();
+        return showGallery;
       },
       get charIdx() {
         return charIdx;
