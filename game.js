@@ -600,6 +600,7 @@
   let charIdx = 0;
   let selectScroll = 0; // vertical scroll offset for the character-select grid
   let milestoneScroll = 0; // vertical scroll offset for the Boards milestones list
+  let achievementScroll = 0; // vertical scroll offset for the Boards achievements grid
   let selected = null;
   let player = null;
   let cam = { x: 0, y: 0 };
@@ -5688,12 +5689,19 @@
       ctx.fillStyle = "#a090b8";
       ctx.font = font(12);
       ctx.fillText(`Store board · ${unlockedN}/${list.length} · IDs ready for Steam / Play / App Store`, W / 2 - 330, 120);
+      const achLayout = achievementListLayout(list.length);
+      achievementScroll = clamp(achievementScroll, 0, achLayout.maxScroll);
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(W / 2 - 330, achLayout.viewTop - 22, 660, achLayout.viewBottom - achLayout.viewTop + 22);
+      ctx.clip();
       list.forEach((a, i) => {
         const on = !!achievements[a.id];
-        const col = i % 2;
-        const row = Math.floor(i / 2);
+        const col = i % achLayout.cols;
+        const row = Math.floor(i / achLayout.cols);
         const x = W / 2 - 330 + col * 340;
-        const y = 140 + row * 34;
+        const y = achLayout.viewTop + row * achLayout.rowH - achievementScroll;
+        if (y < achLayout.viewTop - achLayout.rowH || y > achLayout.viewBottom) return;
         ctx.fillStyle = on ? "rgba(50,90,60,0.45)" : "rgba(35,28,50,0.55)";
         drawRounded(x, y - 12, 328, 30, 6);
         ctx.fill();
@@ -5704,10 +5712,15 @@
         ctx.font = font(10);
         fitText(a.tier || "", x + 220, y + 4, 90, "left");
       });
+      ctx.restore();
       ctx.textAlign = "center";
       ctx.fillStyle = "#8878a8";
       ctx.font = font(11);
-      ctx.fillText("Public board for store pages · Tab for milestones · Esc/G close", W / 2, 500);
+      ctx.fillText(
+        "Public board for store pages · Tab for milestones · Esc/G close" + (achLayout.maxScroll ? " · scroll for more" : ""),
+        W / 2,
+        500
+      );
       if (bestEnding) {
         ctx.fillStyle = "#ffd080";
         ctx.fillText(`Best ending: ${bestEnding.title} (${bestEnding.character})`, W / 2, 478);
@@ -6086,6 +6099,17 @@
     const contentH = count * rowH;
     const maxScroll = Math.max(0, contentH - (viewBottom - viewTop));
     return { rowH, viewTop, viewBottom, maxScroll };
+  }
+  // Same idiom again for the 2-column public-achievements grid.
+  function achievementListLayout(count) {
+    const cols = 2,
+      rowH = 34;
+    const viewTop = 132,
+      viewBottom = 460;
+    const rows = Math.ceil(count / cols);
+    const contentH = rows * rowH;
+    const maxScroll = Math.max(0, contentH - (viewBottom - viewTop));
+    return { cols, rowH, viewTop, viewBottom, maxScroll };
   }
 
   function selectScrollToShow(i, rosterLen) {
@@ -7015,6 +7039,11 @@
         const layout = milestoneListLayout(visibleMs.length);
         milestoneScroll = clamp(milestoneScroll + Math.sign(e.deltaY) * 36, 0, layout.maxScroll);
         e.preventDefault();
+      } else if (showGallery && galleryTab !== "miles") {
+        const list = ACHIEVEMENT_DEFS.length ? ACHIEVEMENT_DEFS : [{ id: "first_voter" }];
+        const layout = achievementListLayout(list.length);
+        achievementScroll = clamp(achievementScroll + Math.sign(e.deltaY) * 34, 0, layout.maxScroll);
+        e.preventDefault();
       }
     },
     { passive: false }
@@ -7624,6 +7653,9 @@
       },
       get milestoneScroll() {
         return milestoneScroll;
+      },
+      get achievementScroll() {
+        return achievementScroll;
       },
       openGallery(tab) {
         showGallery = true;
