@@ -6638,9 +6638,8 @@
       const chapter = campaignChapter();
       const decision = chapter && (chapter.decisions || [])[chapterDecisionIndex];
       if (chapterPhase === "decision" && decision) {
-        const n = decision.options.length;
-        if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") chapterChoice = (chapterChoice + n - 1) % n;
-        else if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") chapterChoice = (chapterChoice + 1) % n;
+        if (e.key === "ArrowUp" || e.key === "w" || e.key === "W") chapterChoice = stepChapterChoice(decision, chapterChoice, -1);
+        else if (e.key === "ArrowDown" || e.key === "s" || e.key === "S") chapterChoice = stepChapterChoice(decision, chapterChoice, 1);
       }
       if (e.key === "Enter" || e.key === " ") advanceCampaignChapter();
       e.preventDefault();
